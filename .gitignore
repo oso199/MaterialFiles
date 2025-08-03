@@ -1,8 +1,8 @@
-/.gradle/
+master/.gradle/
 /.idea/
-/build/
+master/build/
 /captures/
-/local.properties
+/local.properties hola
 /signing.jks
 /signing.properties
 .DS_Store
