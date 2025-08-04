@@ -6,7 +6,6 @@
 package me.zhanghai.android.files.provider.smb
 
 import com.hierynomus.msdtyp.AccessMask
-import com.hierynomus.smbj.SMBClient
 import java8.nio.channels.FileChannel
 import java8.nio.channels.SeekableByteChannel
 import java8.nio.file.AccessMode
@@ -44,9 +43,10 @@ import me.zhanghai.android.files.provider.smb.client.Client
 import me.zhanghai.android.files.provider.smb.client.ClientException
 import me.zhanghai.android.files.provider.smb.client.FileInformation
 import me.zhanghai.android.files.provider.smb.client.SymbolicLinkReparseData
+import me.zhanghai.android.files.util.enumSetOf
+import me.zhanghai.android.files.util.takeIfNotEmpty
 import java.io.IOException
 import java.net.URI
-import java.util.EnumSet
 
 object SmbFileSystemProvider : FileSystemProvider(), PathObservableProvider, Searchable {
     private const val SCHEME = "smb"
@@ -61,7 +61,7 @@ object SmbFileSystemProvider : FileSystemProvider(), PathObservableProvider, Sea
 
     override fun newFileSystem(uri: URI, env: Map<String, *>): FileSystem {
         uri.requireSameScheme()
-        val authority = Authority(uri.host, uri.portOrDefaultPort)
+        val authority = uri.smbAuthority
         synchronized(lock) {
             if (fileSystems[authority] != null) {
                 throw FileSystemAlreadyExistsException(authority.toString())
@@ -81,7 +81,7 @@ object SmbFileSystemProvider : FileSystemProvider(), PathObservableProvider, Sea
 
     override fun getFileSystem(uri: URI): FileSystem {
         uri.requireSameScheme()
-        val authority = Authority(uri.host, uri.portOrDefaultPort)
+        val authority = uri.smbAuthority
         return synchronized(lock) { fileSystems[authority] }
             ?: throw FileSystemNotFoundException(authority.toString())
     }
@@ -93,7 +93,7 @@ object SmbFileSystemProvider : FileSystemProvider(), PathObservableProvider, Sea
 
     override fun getPath(uri: URI): Path {
         uri.requireSameScheme()
-        val authority = Authority(uri.host, uri.portOrDefaultPort)
+        val authority = uri.smbAuthority
         val path = uri.decodedPathByteString
             ?: throw IllegalArgumentException("URI must have a path")
         return getOrNewFileSystem(authority).getPath(path)
@@ -104,8 +104,22 @@ object SmbFileSystemProvider : FileSystemProvider(), PathObservableProvider, Sea
         require(scheme == SCHEME) { "URI scheme $scheme must be $SCHEME" }
     }
 
-    private val URI.portOrDefaultPort: Int
-        get() = if (port != -1) port else SMBClient.DEFAULT_PORT
+    private val URI.smbAuthority: Authority
+        get() {
+            val port = if (port != -1) port else Authority.DEFAULT_PORT
+            val userInfo = userInfo.orEmpty()
+            val domainSeparatorIndex = userInfo.indexOf('\\')
+            val username: String
+            val domain: String?
+            if (domainSeparatorIndex != -1) {
+                username = userInfo.substring(domainSeparatorIndex + 1)
+                domain = userInfo.substring(0, domainSeparatorIndex).takeIfNotEmpty()
+            } else {
+                username = userInfo
+                domain = null
+            }
+            return Authority(host, port, username, domain)
+        }
 
     @Throws(IOException::class)
     override fun newFileChannel(
@@ -177,11 +191,11 @@ object SmbFileSystemProvider : FileSystemProvider(), PathObservableProvider, Sea
         val isRelative: Boolean
         when (target) {
             is SmbPath -> {
-                if(target.isAbsolute && target.authority.port != SMBClient.DEFAULT_PORT) {
+                if(target.isAbsolute && target.authority.port != Authority.DEFAULT_PORT) {
                     throw InvalidFileNameException(
                         target.toString(), null, "Path is absolute but uses port ${
                         target.authority.port} instead of the default port ${
-                        SMBClient.DEFAULT_PORT}"
+                        Authority.DEFAULT_PORT}"
                     )
                 }
                 targetString = target.toWindowsPath()
@@ -261,7 +275,6 @@ object SmbFileSystemProvider : FileSystemProvider(), PathObservableProvider, Sea
         if (path2 !is SmbPath) {
             return false
         }
-        path2 as? SmbPath ?: throw ProviderMismatchException(path2.toString())
         if (path.authority != path2.authority) {
             return false
         }
@@ -300,7 +313,7 @@ object SmbFileSystemProvider : FileSystemProvider(), PathObservableProvider, Sea
     override fun checkAccess(path: Path, vararg modes: AccessMode) {
         path as? SmbPath ?: throw ProviderMismatchException(path.toString())
         val accessModes = modes.toAccessModes()
-        val desiredAccess = EnumSet.noneOf(AccessMask::class.java)
+        val desiredAccess = enumSetOf<AccessMask>()
         if (accessModes.read) {
             desiredAccess += AccessMask.GENERIC_READ
         }
@@ -326,7 +339,7 @@ object SmbFileSystemProvider : FileSystemProvider(), PathObservableProvider, Sea
             return null
         }
         @Suppress("UNCHECKED_CAST")
-        return getFileAttributeView(path) as V
+        return getFileAttributeView(path, *options) as V
     }
 
     internal fun supportsFileAttributeView(type: Class<out FileAttributeView>): Boolean =
@@ -342,7 +355,7 @@ object SmbFileSystemProvider : FileSystemProvider(), PathObservableProvider, Sea
             throw UnsupportedOperationException(type.toString())
         }
         @Suppress("UNCHECKED_CAST")
-        return getFileAttributeView(path).readAttributes() as A
+        return getFileAttributeView(path, *options).readAttributes() as A
     }
 
     private fun getFileAttributeView(path: Path, vararg options: LinkOption): SmbFileAttributeView {

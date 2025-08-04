@@ -8,130 +8,86 @@ package me.zhanghai.android.files.provider.smb.client
 import com.hierynomus.mserref.NtStatus
 import com.hierynomus.msfscc.fileinformation.FileStandardInformation
 import com.hierynomus.mssmb2.SMBApiException
-import com.hierynomus.mssmb2.messages.SMB2ReadResponse
-import com.hierynomus.protocol.commons.concurrent.Futures
-import com.hierynomus.protocol.transport.TransportException
 import com.hierynomus.smbj.common.SMBRuntimeException
 import com.hierynomus.smbj.io.ByteChunkProvider
 import com.hierynomus.smbj.share.File
 import com.hierynomus.smbj.share.FileAccessor
-import java8.nio.channels.SeekableByteChannel
-import me.zhanghai.android.files.provider.common.ForceableChannel
+import me.zhanghai.android.files.provider.common.AbstractFileByteChannel
+import me.zhanghai.android.files.provider.common.EMPTY
+import me.zhanghai.android.files.provider.common.map
 import me.zhanghai.android.files.util.closeSafe
-import java.io.Closeable
+import me.zhanghai.android.files.util.findCauseByClass
 import java.io.IOException
 import java.io.InterruptedIOException
 import java.nio.ByteBuffer
 import java.nio.channels.AsynchronousCloseException
 import java.nio.channels.ClosedByInterruptException
-import java.nio.channels.ClosedChannelException
+import java.util.concurrent.ExecutionException
 import java.util.concurrent.Future
-import java.util.concurrent.TimeUnit
 
 class FileByteChannel(
     private val file: File,
-    private val isAppend: Boolean
-) : ForceableChannel, SeekableByteChannel {
-    private var position = 0L
-    private val ioLock = Any()
-
-    private val readBuffer = ReadBuffer()
-
-    private var isOpen = true
-    private val closeLock = Any()
-
+    isAppend: Boolean
+// Cancelling reads leads to TransportException: Received response with unknown sequence number
+) : AbstractFileByteChannel(isAppend, shouldCancelRead = false) {
     @Throws(IOException::class)
-    override fun read(destination: ByteBuffer): Int {
-        ensureOpen()
-        val remaining = destination.remaining()
-        if (remaining == 0) {
-            return 0
+    override fun onReadAsync(position: Long, size: Int, timeoutMillis: Long): Future<ByteBuffer> =
+        try {
+            FileAccessor.readAsync(file, position, size)
+        } catch (e: SMBRuntimeException) {
+            throw e.toIOException()
         }
-        return synchronized(ioLock) {
-            readBuffer.read(destination).also {
-                if (it != -1) {
-                    position += it
+            .map(
+                { response ->
+                    when (response.header.statusCode) {
+                        NtStatus.STATUS_END_OF_FILE.value -> {
+                            return@map ByteBuffer::class.EMPTY
+                        }
+                        NtStatus.STATUS_SUCCESS.value -> {}
+                        else -> throw SMBApiException(response.header, "Read failed for $this")
+                            .toIOException()
+                    }
+                    val data = response.data
+                    if (data.isEmpty()) {
+                        return@map ByteBuffer::class.EMPTY
+                    }
+                    val length = data.size.coerceAtMost(size)
+                    ByteBuffer.wrap(data, 0, length)
+                }, { e ->
+                    ExecutionException(SMBRuntimeException(e).toIOException())
                 }
-            }
+            )
+
+    @Throws(IOException::class)
+    override fun onWrite(position: Long, source: ByteBuffer) {
+        val sourcePosition = source.position()
+        val bytesWritten = try {
+            file.write(ByteBufferChunkProvider(source, position)).toInt()
+        } catch (e: SMBRuntimeException) {
+            throw e.toIOException()
         }
+        source.position(sourcePosition + bytesWritten)
     }
 
     @Throws(IOException::class)
-    override fun write(source: ByteBuffer): Int {
-        ensureOpen()
-        synchronized(ioLock) {
-            if (isAppend) {
-                position = try {
-                    file.getFileInformation(FileStandardInformation::class.java).endOfFile
-                } catch (e: SMBRuntimeException) {
-                    throw e.toIOException()
-                }
-            }
-            if (!source.hasRemaining()) {
-                return 0
-            }
-            val length = try {
-                file.write(ByteBufferChunkProvider(source, position))
-            } catch (e: SMBRuntimeException) {
-                throw e.toIOException()
-            }
-            position += length
-            return length
-        }
-    }
-
-    override fun position(): Long {
-        ensureOpen()
-        synchronized(ioLock) {
-            return position
-        }
-    }
-
-    override fun position(newPosition: Long): SeekableByteChannel {
-        ensureOpen()
-        synchronized(ioLock) {
-            readBuffer.reposition(position, newPosition)
-            position = newPosition
-        }
-        return this
-    }
-
-    @Throws(IOException::class)
-    override fun size(): Long {
-        ensureOpen()
-        return try {
-            file.getFileInformation(FileStandardInformation::class.java).endOfFile
+    override fun onTruncate(size: Long) {
+        try {
+            file.setLength(size)
         } catch (e: SMBRuntimeException) {
             throw e.toIOException()
         }
     }
 
     @Throws(IOException::class)
-    override fun truncate(size: Long): SeekableByteChannel {
-        ensureOpen()
-        require(size >= 0)
-        val currentSize = try {
+    override fun onSize(): Long =
+        try {
             file.getFileInformation(FileStandardInformation::class.java).endOfFile
         } catch (e: SMBRuntimeException) {
             throw e.toIOException()
         }
-        if (size >= currentSize) {
-            return this
-        }
-        synchronized(ioLock) {
-            try {
-                file.setLength(size)
-            } catch (e: SMBRuntimeException) {
-                throw e.toIOException()
-            }
-            position = position.coerceAtMost(size)
-        }
-        return this
-    }
 
     @Throws(IOException::class)
-    override fun force(metaData: Boolean) {
-        ensureOpen()
+    override fun onForce(metaData: Boolean) {
         try {
             file.flush()
         } catch (e: SMBRuntimeException) {
@@ -139,165 +95,51 @@ class FileByteChannel(
         }
     }
 
-    @Throws(ClosedChannelException::class)
-    private fun ensureOpen() {
-        synchronized(closeLock) {
-            if (!isOpen) {
-                throw ClosedChannelException()
-            }
-        }
-    }
-
     private fun SMBRuntimeException.toIOException(): IOException =
         when {
-            this is SMBApiException && status == NtStatus.STATUS_FILE_CLOSED -> {
-                synchronized(closeLock) { isOpen = false }
+            findCauseByClass<SMBApiException>()
+                .let { it != null && it.status == NtStatus.STATUS_FILE_CLOSED } -> {
+                setClosed()
                 AsynchronousCloseException().apply { initCause(this@toIOException) }
             }
-            cause?.cause is InterruptedException -> {
+            findCauseByClass<InterruptedException>() != null -> {
                 closeSafe()
                 ClosedByInterruptException().apply { initCause(this@toIOException) }
             }
             else -> IOException(this)
         }
 
-    override fun isOpen(): Boolean = synchronized(closeLock) { isOpen }
-
     @Throws(IOException::class)
-    override fun close() {
-        synchronized(closeLock) {
-            if (!isOpen) {
-                return
-            }
-            readBuffer.closeSafe()
-            try {
-                file.close()
-            } catch (e: SMBRuntimeException) {
-                throw when {
-                    e.cause?.cause is InterruptedException -> InterruptedIOException()
-                        .apply { initCause(e) }
-                    else -> IOException(e)
-                }
+    override fun onClose() {
+        try {
+            file.close()
+        } catch (e: SMBRuntimeException) {
+            throw when {
+                e.findCauseByClass<InterruptedException>() != null ->
+                    InterruptedIOException().apply { initCause(e) }
+                else -> IOException(e)
             }
         }
     }
 
-    private inner class ReadBuffer : Closeable {
-        private val bufferSize: Int
-        private val timeout: Long
-
+    private class ByteBufferChunkProvider(
+        private val buffer: ByteBuffer,
+        offset: Long
+    ) : ByteChunkProvider() {
         init {
-            val connection = file.diskShare.treeConnect.session.connection
-            bufferSize = connection.config.readBufferSize
-                .coerceAtMost(connection.negotiatedProtocol.maxReadSize)
-            timeout = connection.config.readTimeout
+            this.offset = offset
         }
 
-        private val buffer = ByteBuffer.allocate(bufferSize).apply { limit(0) }
-        private var bufferedPosition = 0L
+        override fun isAvailable(): Boolean = buffer.hasRemaining()
 
-        private var pendingFuture: Future<SMB2ReadResponse>? = null
-        private val pendingFutureLock = Any()
+        override fun bytesLeft(): Int = buffer.remaining()
 
-        @Throws(IOException::class)
-        fun read(destination: ByteBuffer): Int {
-            if (!buffer.hasRemaining()) {
-                if (!readIntoBuffer()) {
-                    return -1
-                }
-            }
-            val length = destination.remaining().coerceAtMost(buffer.remaining())
-            val bufferLimit = buffer.limit()
-            buffer.limit(buffer.position() + length)
-            destination.put(buffer)
-            buffer.limit(bufferLimit)
+        override fun prepareWrite(maxBytesToPrepare: Int) {}
+
+        override fun getChunk(chunk: ByteArray): Int {
+            val length = chunk.size.coerceAtMost(buffer.remaining())
+            buffer.get(chunk, 0, length)
             return length
         }
-
-        @Throws(IOException::class)
-        private fun readIntoBuffer(): Boolean {
-            val future = synchronized(pendingFutureLock) {
-                pendingFuture?.also { pendingFuture = null }
-            } ?: readIntoBufferAsync()
-            val response = try {
-                Futures.get(future, timeout, TimeUnit.MILLISECONDS, TransportException.Wrapper)
-            } catch (e: SMBRuntimeException) {
-                throw e.toIOException()
-            }
-            when (response.header.statusCode) {
-                NtStatus.STATUS_END_OF_FILE.value -> return false
-                NtStatus.STATUS_SUCCESS.value -> {}
-                else -> throw SMBApiException(response.header, "Read failed for $this")
-                    .toIOException()
-            }
-            val data = response.data
-            if (data.isEmpty()) {
-                return false
-            }
-            buffer.clear()
-            val length = data.size.coerceAtMost(buffer.remaining())
-            buffer.put(data, 0, length)
-            buffer.flip()
-            bufferedPosition += length
-            synchronized(pendingFutureLock) {
-                pendingFuture = try {
-                    readIntoBufferAsync()
-                } catch (e: IOException) {
-                    e.printStackTrace()
-                    null
-                }
-            }
-            return true
-        }
-
-        @Throws(IOException::class)
-        private fun readIntoBufferAsync(): Future<SMB2ReadResponse> =
-            try {
-                FileAccessor.readAsync(file, bufferedPosition, bufferSize)
-            } catch (e: SMBRuntimeException) {
-                throw e.toIOException()
-            }
-
-        fun reposition(oldPosition: Long, newPosition: Long) {
-            if (newPosition == oldPosition) {
-                return
-            }
-            val newBufferPosition = buffer.position() + (newPosition - oldPosition)
-            if (newBufferPosition in 0..buffer.limit()) {
-                buffer.position(newBufferPosition.toInt())
-            } else {
-                synchronized(pendingFutureLock) {
-                    pendingFuture?.cancel(true)?.also { pendingFuture = null }
-                }
-                buffer.limit(0)
-                bufferedPosition = newPosition
-            }
-        }
-
-        @Throws(IOException::class)
-        override fun close() {
-            synchronized(pendingFutureLock) {
-                pendingFuture?.cancel(true)?.also { pendingFuture = null }
-            }
-        }
-    }
-}
-
-private class ByteBufferChunkProvider(
-    private val buffer: ByteBuffer,
-    offset: Long
-) : ByteChunkProvider() {
-    init {
-        this.offset = offset
-    }
-
-    override fun isAvailable(): Boolean = buffer.hasRemaining()
-
-    override fun bytesLeft(): Int = buffer.remaining()
-
-    override fun getChunk(chunk: ByteArray): Int {
-        val length = chunk.size.coerceAtMost(buffer.remaining())
-        buffer.get(chunk, 0, length)
-        return length
     }
 }

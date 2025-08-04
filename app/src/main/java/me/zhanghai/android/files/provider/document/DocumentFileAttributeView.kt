@@ -10,7 +10,6 @@ import android.os.Parcelable
 import android.provider.DocumentsContract
 import java8.nio.file.attribute.BasicFileAttributeView
 import java8.nio.file.attribute.FileTime
-import me.zhanghai.android.files.compat.use
 import me.zhanghai.android.files.provider.content.resolver.ResolverException
 import me.zhanghai.android.files.provider.content.resolver.getInt
 import me.zhanghai.android.files.provider.content.resolver.getLong
@@ -37,21 +36,14 @@ internal class DocumentFileAttributeView(
         var size: Long
         var flags: Int
         try {
-            DocumentResolver.query(
-                uri, arrayOf(
-                    DocumentsContract.Document.COLUMN_LAST_MODIFIED,
-                    DocumentsContract.Document.COLUMN_MIME_TYPE,
-                    DocumentsContract.Document.COLUMN_SIZE,
-                    DocumentsContract.Document.COLUMN_FLAGS
-                ), null
-            ).use { cursor ->
+            DocumentResolver.queryDocument(path, uri).use { cursor ->
                 cursor.moveToFirstOrThrow()
                 lastModifiedTimeMillis = cursor.getLong(
                     DocumentsContract.Document.COLUMN_LAST_MODIFIED
-                )
+                ) ?: 0
                 mimeType = cursor.getString(DocumentsContract.Document.COLUMN_MIME_TYPE)
-                size = cursor.getLong(DocumentsContract.Document.COLUMN_SIZE)
-                flags = cursor.getInt(DocumentsContract.Document.COLUMN_FLAGS)
+                size = cursor.getLong(DocumentsContract.Document.COLUMN_SIZE) ?: 0
+                flags = cursor.getInt(DocumentsContract.Document.COLUMN_FLAGS) ?: 0
             }
         } catch (e: ResolverException) {
             throw e.toFileSystemException(path.toString())

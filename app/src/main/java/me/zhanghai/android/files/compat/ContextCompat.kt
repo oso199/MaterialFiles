@@ -6,7 +6,10 @@
 package me.zhanghai.android.files.compat
 
 import android.annotation.SuppressLint
+import android.content.BroadcastReceiver
 import android.content.Context
+import android.content.Intent
+import android.content.IntentFilter
 import android.content.res.ColorStateList
 import android.graphics.drawable.Drawable
 import android.util.AttributeSet
@@ -19,11 +22,15 @@ import androidx.annotation.StyleableRes
 import androidx.appcompat.content.res.AppCompatResources
 import androidx.appcompat.widget.TintTypedArray
 import androidx.core.content.ContextCompat
-import me.zhanghai.java.reflected.ReflectedMethod
+import me.zhanghai.android.files.hiddenapi.RestrictedHiddenApi
+import me.zhanghai.android.files.util.lazyReflectedMethod
 import java.util.concurrent.Executor
 import kotlin.contracts.ExperimentalContracts
 import kotlin.contracts.InvocationKind
 import kotlin.contracts.contract
+
+fun Context.checkSelfPermissionCompat(permission: String): Int =
+    ContextCompat.checkSelfPermission(this, permission)
 
 @ColorInt
 fun Context.getColorCompat(@ColorRes id: Int): Int = getColorStateListCompat(id).defaultColor
@@ -33,6 +40,12 @@ fun Context.getColorStateListCompat(@ColorRes id: Int): ColorStateList =
 
 fun Context.getDrawableCompat(@DrawableRes id: Int): Drawable =
     AppCompatResources.getDrawable(this, id)!!
+
+fun <T> Context.getSystemServiceCompat(serviceClass: Class<T>): T =
+    ContextCompat.getSystemService(this, serviceClass)!!
+
+val Context.mainExecutorCompat: Executor
+    get() = ContextCompat.getMainExecutor(this)
 
 @SuppressLint("RestrictedApi")
 fun Context.obtainStyledAttributesCompat(
@@ -56,15 +69,15 @@ inline fun <R> TintTypedArray.use(block: (TintTypedArray) -> R): R {
     }
 }
 
-val Context.mainExecutorCompat: Executor
-    get() = ContextCompat.getMainExecutor(this)
-
-fun <T> Context.getSystemServiceCompat(serviceClass: Class<T>):T =
-    ContextCompat.getSystemService(this, serviceClass)!!
+fun Context.registerReceiverCompat(
+    receiver: BroadcastReceiver?,
+    filter: IntentFilter,
+    flags: Int
+): Intent? = ContextCompat.registerReceiver(this, receiver, filter, flags)
 
 @RestrictedHiddenApi
-private val getThemeResIdMethod = ReflectedMethod(Context::class.java, "getThemeResId")
+private val getThemeResIdMethod by lazyReflectedMethod(Context::class.java, "getThemeResId")
 
 val Context.themeResIdCompat: Int
     @StyleRes
-    get() = getThemeResIdMethod.invoke(this)
+    get() = getThemeResIdMethod.invoke(this) as Int

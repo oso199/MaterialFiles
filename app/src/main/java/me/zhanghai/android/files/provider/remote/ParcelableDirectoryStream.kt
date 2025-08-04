@@ -10,9 +10,8 @@ import android.os.Parcelable
 import java8.nio.file.DirectoryIteratorException
 import java8.nio.file.DirectoryStream
 import java8.nio.file.Path
-import me.zhanghai.android.files.compat.writeParcelableListCompat
 import me.zhanghai.android.files.provider.common.PathListDirectoryStream
-import me.zhanghai.android.files.util.readParcelableListCompat
+import me.zhanghai.android.files.util.ParcelSlicedList
 import java.io.IOException
 
 class ParcelableDirectoryStream : Parcelable {
@@ -34,13 +33,13 @@ class ParcelableDirectoryStream : Parcelable {
 
     override fun writeToParcel(dest: Parcel, flags: Int) {
         @Suppress("UNCHECKED_CAST")
-        dest.writeParcelableListCompat(paths as List<Parcelable>, flags)
+        dest.writeParcelable(ParcelSlicedList(paths as List<Parcelable>), flags)
     }
 
     private constructor(source: Parcel) {
         @Suppress("UNCHECKED_CAST")
-        paths = source.readParcelableListCompat<Parcelable>(Path::class.java.classLoader)
-            as List<Path>
+        paths = source.readParcelable<ParcelSlicedList<Parcelable>>(Path::class.java.classLoader)!!
+            .list as List<Path>
     }
 
     companion object {

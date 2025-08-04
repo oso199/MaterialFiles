@@ -6,18 +6,14 @@
 package me.zhanghai.android.files.util
 
 import android.graphics.Typeface
-import android.text.Editable
 import android.view.KeyEvent
 import android.view.inputmethod.EditorInfo
 import android.widget.TextView
+import androidx.core.widget.doAfterTextChanged
 import com.google.android.material.textfield.TextInputLayout
 
-fun TextView.hideTextInputLayoutErrorOnTextChange(textInputLayout: TextInputLayout) {
-    addTextChangedListener(object : SimpleTextWatcher {
-        override fun afterTextChanged(text: Editable) {
-            textInputLayout.error = null
-        }
-    })
+fun TextView.hideTextInputLayoutErrorOnTextChange(vararg textInputLayouts: TextInputLayout) {
+    doAfterTextChanged { textInputLayouts.forEach { it.error = null } }
 }
 
 var TextView.isBold: Boolean
@@ -65,7 +61,7 @@ fun TextView.setOnEditorConfirmActionListener(listener: (TextView) -> Unit) {
     setOnEditorActionListener { view, actionId, event ->
         val isConfirmAction = if (event != null) {
             when (event.keyCode) {
-                KeyEvent.KEYCODE_DPAD_CENTER, KeyEvent.KEYCODE_ENTER, KeyEvent.KEYCODE_SPACE,
+                KeyEvent.KEYCODE_DPAD_CENTER, KeyEvent.KEYCODE_ENTER,
                 KeyEvent.KEYCODE_NUMPAD_ENTER -> true
                 else -> false
             } && event.action == KeyEvent.ACTION_DOWN
@@ -96,5 +92,5 @@ fun TextView.setSpanClickable() {
 
 fun TextView.setSpanClickableAndTextSelectable() {
     setTextIsSelectable(true)
-    movementMethod = LinkArrowKeyMovementMethod
+    movementMethod = ClickableArrowKeyMovementMethod
 }

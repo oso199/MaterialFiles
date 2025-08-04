@@ -24,7 +24,6 @@
             android:id="@+id/toolbar"
             android:layout_width="match_parent"
             android:layout_height="?actionBarSize"
-            app:navigationIcon="@drawable/back_icon_control_normal_24dp"
             app:popupTheme="?actionBarPopupTheme" />
     </me.zhanghai.android.files.ui.CoordinatorAppBarLayout>
 
@@ -84,16 +83,16 @@
                                 android:textAppearance="@style/TextAppearance.AppCompat.Headline" />
                         </LinearLayout>
 
-                        <LinearLayout
+                        <me.zhanghai.android.foregroundcompat.ForegroundLinearLayout
                             android:layout_width="match_parent"
                             android:layout_height="wrap_content"
                             android:paddingStart="?android:listPreferredItemPaddingStart"
                             android:paddingEnd="?android:listPreferredItemPaddingEnd"
                             android:paddingTop="8dp"
                             android:paddingBottom="8dp"
-                            android:background="?selectableItemBackground"
                             android:clickable="true"
                             android:focusable="true"
+                            android:foreground="?selectableItemBackground"
                             android:gravity="center_vertical"
                             android:orientation="horizontal">
 
@@ -102,7 +101,7 @@
                                 android:layout_height="@dimen/icon_size"
                                 android:scaleType="centerCrop"
                                 android:src="@drawable/information_icon_white_24dp"
-                                app:tint="?android:textColorSecondary" />
+                                app:tint="?colorControlNormal" />
 
                             <LinearLayout
                                 android:layout_width="0dp"
@@ -118,7 +117,7 @@
                                     android:ellipsize="end"
                                     android:maxLines="1"
                                     android:text="@string/about_version_title"
-                                    android:textAppearance="@style/TextAppearance.AppCompat.Subhead" />
+                                    android:textAppearance="?textAppearanceListItem" />
 
                                 <TextView
                                     android:layout_width="wrap_content"
@@ -129,15 +128,15 @@
                                     android:text="@string/app_version"
                                     android:textAppearance="@style/TextAppearance.AppCompat.Caption" />
                             </LinearLayout>
-                        </LinearLayout>
+                        </me.zhanghai.android.foregroundcompat.ForegroundLinearLayout>
 
-                        <LinearLayout
+                        <me.zhanghai.android.foregroundcompat.ForegroundLinearLayout
                             android:id="@+id/gitHubLayout"
                             android:layout_width="match_parent"
                             android:layout_height="?listPreferredItemHeightSmall"
                             android:paddingStart="?android:listPreferredItemPaddingStart"
                             android:paddingEnd="?android:listPreferredItemPaddingEnd"
-                            android:background="?selectableItemBackground"
+                            android:foreground="?selectableItemBackground"
                             android:gravity="center_vertical"
                             android:orientation="horizontal">
 
@@ -146,7 +145,7 @@
                                 android:layout_height="@dimen/icon_size"
                                 android:scaleType="centerCrop"
                                 android:src="@drawable/github_icon_white_24dp"
-                                app:tint="?android:textColorSecondary" />
+                                app:tint="?colorControlNormal" />
 
                             <TextView
                                 android:layout_width="wrap_content"
@@ -155,16 +154,16 @@
                                 android:ellipsize="end"
                                 android:maxLines="1"
                                 android:text="@string/about_github_title"
-                                android:textAppearance="@style/TextAppearance.AppCompat.Subhead" />
-                        </LinearLayout>
+                                android:textAppearance="?textAppearanceListItem" />
+                        </me.zhanghai.android.foregroundcompat.ForegroundLinearLayout>
 
-                        <LinearLayout
+                        <me.zhanghai.android.foregroundcompat.ForegroundLinearLayout
                             android:id="@+id/licensesLayout"
                             android:layout_width="match_parent"
                             android:layout_height="?listPreferredItemHeightSmall"
                             android:paddingStart="?android:listPreferredItemPaddingStart"
                             android:paddingEnd="?android:listPreferredItemPaddingEnd"
-                            android:background="?selectableItemBackground"
+                            android:foreground="?selectableItemBackground"
                             android:gravity="center_vertical"
                             android:orientation="horizontal">
 
@@ -173,7 +172,7 @@
                                 android:layout_height="@dimen/icon_size"
                                 android:scaleType="centerCrop"
                                 android:src="@drawable/text_file_icon_white_24dp"
-                                app:tint="?android:textColorSecondary" />
+                                app:tint="?colorControlNormal" />
 
                             <TextView
                                 android:layout_width="wrap_content"
@@ -182,25 +181,26 @@
                                 android:ellipsize="end"
                                 android:maxLines="1"
                                 android:text="@string/about_licenses_title"
-                                android:textAppearance="@style/TextAppearance.AppCompat.Subhead" />
-                        </LinearLayout>
+                                android:textAppearance="?textAppearanceListItem" />
+                        </me.zhanghai.android.foregroundcompat.ForegroundLinearLayout>
 
-                        <LinearLayout
+                        <me.zhanghai.android.foregroundcompat.ForegroundLinearLayout
                             android:id="@+id/privacyPolicyLayout"
                             android:layout_width="match_parent"
                             android:layout_height="?listPreferredItemHeightSmall"
                             android:paddingStart="?android:listPreferredItemPaddingStart"
                             android:paddingEnd="?android:listPreferredItemPaddingEnd"
-                            android:background="?selectableItemBackground"
+                            android:foreground="?selectableItemBackground"
                             android:gravity="center_vertical"
-                            android:orientation="horizontal">
+                            android:orientation="horizontal"
+                            android:visibility="gone">
 
                             <ImageView
                                 android:layout_width="@dimen/icon_size"
                                 android:layout_height="@dimen/icon_size"
                                 android:scaleType="centerCrop"
                                 android:src="@drawable/lock_icon_white_24dp"
-                                app:tint="?android:textColorSecondary" />
+                                app:tint="?colorControlNormal" />
 
                             <TextView
                                 android:layout_width="wrap_content"
@@ -209,8 +209,8 @@
                                 android:ellipsize="end"
                                 android:maxLines="1"
                                 android:text="@string/about_privacy_policy_title"
-                                android:textAppearance="@style/TextAppearance.AppCompat.Subhead" />
-                        </LinearLayout>
+                                android:textAppearance="?textAppearanceListItem" />
+                        </me.zhanghai.android.foregroundcompat.ForegroundLinearLayout>
                     </LinearLayout>
                 </com.google.android.material.card.MaterialCardView>
 
@@ -244,15 +244,15 @@
                                 android:textColor="?android:textColorSecondary" />
                         </LinearLayout>
 
-                        <LinearLayout
+                        <me.zhanghai.android.foregroundcompat.ForegroundLinearLayout
                             android:id="@+id/authorNameLayout"
                             android:layout_width="match_parent"
                             android:layout_height="?listPreferredItemHeightSmall"
                             android:paddingStart="?android:listPreferredItemPaddingStart"
                             android:paddingEnd="?android:listPreferredItemPaddingEnd"
-                            android:background="?selectableItemBackground"
                             android:clickable="true"
                             android:focusable="true"
+                            android:foreground="?selectableItemBackground"
                             android:gravity="center_vertical"
                             android:orientation="horizontal">
 
@@ -261,7 +261,7 @@
                                 android:layout_height="@dimen/icon_size"
                                 android:scaleType="centerCrop"
                                 android:src="@drawable/person_icon_white_24dp"
-                                app:tint="?android:textColorSecondary" />
+                                app:tint="?colorControlNormal" />
 
                             <TextView
                                 android:layout_width="wrap_content"
@@ -270,16 +270,16 @@
                                 android:ellipsize="end"
                                 android:maxLines="1"
                                 android:text="@string/about_author_name_title"
-                                android:textAppearance="@style/TextAppearance.AppCompat.Subhead" />
-                        </LinearLayout>
+                                android:textAppearance="?textAppearanceListItem" />
+                        </me.zhanghai.android.foregroundcompat.ForegroundLinearLayout>
 
-                        <LinearLayout
+                        <me.zhanghai.android.foregroundcompat.ForegroundLinearLayout
                             android:id="@+id/authorGitHubLayout"
                             android:layout_width="match_parent"
                             android:layout_height="?listPreferredItemHeightSmall"
                             android:paddingStart="?android:listPreferredItemPaddingStart"
                             android:paddingEnd="?android:listPreferredItemPaddingEnd"
-                            android:background="?selectableItemBackground"
+                            android:foreground="?selectableItemBackground"
                             android:gravity="center_vertical"
                             android:orientation="horizontal">
 
@@ -288,7 +288,7 @@
                                 android:layout_height="@dimen/icon_size"
                                 android:scaleType="centerCrop"
                                 android:src="@drawable/github_icon_white_24dp"
-                                app:tint="?android:textColorSecondary" />
+                                app:tint="?colorControlNormal" />
 
                             <TextView
                                 android:layout_width="wrap_content"
@@ -297,43 +297,16 @@
                                 android:ellipsize="end"
                                 android:maxLines="1"
                                 android:text="@string/about_author_github_title"
-                                android:textAppearance="@style/TextAppearance.AppCompat.Subhead" />
-                        </LinearLayout>
+                                android:textAppearance="?textAppearanceListItem" />
+                        </me.zhanghai.android.foregroundcompat.ForegroundLinearLayout>
 
-                        <LinearLayout
-                            android:id="@+id/authorGooglePlusLayout"
-                            android:layout_width="match_parent"
-                            android:layout_height="?listPreferredItemHeightSmall"
-                            android:paddingStart="?android:listPreferredItemPaddingStart"
-                            android:paddingEnd="?android:listPreferredItemPaddingEnd"
-                            android:background="?selectableItemBackground"
-                            android:gravity="center_vertical"
-                            android:orientation="horizontal">
-
-                            <ImageView
-                                android:layout_width="@dimen/icon_size"
-                                android:layout_height="@dimen/icon_size"
-                                android:scaleType="centerCrop"
-                                android:src="@drawable/google_plus_icon_white_24dp"
-                                app:tint="?android:textColorSecondary" />
-
-                            <TextView
-                                android:layout_width="wrap_content"
-                                android:layout_height="wrap_content"
-                                android:layout_marginStart="@dimen/content_start_from_screen_edge_margin_minus_24dp"
-                                android:ellipsize="end"
-                                android:maxLines="1"
-                                android:text="@string/about_author_google_plus_title"
-                                android:textAppearance="@style/TextAppearance.AppCompat.Subhead" />
-                        </LinearLayout>
-
-                        <LinearLayout
+                        <me.zhanghai.android.foregroundcompat.ForegroundLinearLayout
                             android:id="@+id/authorTwitterLayout"
                             android:layout_width="match_parent"
                             android:layout_height="?listPreferredItemHeightSmall"
                             android:paddingStart="?android:listPreferredItemPaddingStart"
                             android:paddingEnd="?android:listPreferredItemPaddingEnd"
-                            android:background="?selectableItemBackground"
+                            android:foreground="?selectableItemBackground"
                             android:gravity="center_vertical"
                             android:orientation="horizontal">
 
@@ -342,7 +315,7 @@
                                 android:layout_height="@dimen/icon_size"
                                 android:scaleType="centerCrop"
                                 android:src="@drawable/twitter_icon_white_24dp"
-                                app:tint="?android:textColorSecondary" />
+                                app:tint="?colorControlNormal" />
 
                             <TextView
                                 android:layout_width="wrap_content"
@@ -351,8 +324,8 @@
                                 android:ellipsize="end"
                                 android:maxLines="1"
                                 android:text="@string/about_author_twitter_title"
-                                android:textAppearance="@style/TextAppearance.AppCompat.Subhead" />
-                        </LinearLayout>
+                                android:textAppearance="?textAppearanceListItem" />
+                        </me.zhanghai.android.foregroundcompat.ForegroundLinearLayout>
                     </LinearLayout>
                 </com.google.android.material.card.MaterialCardView>
             </LinearLayout>

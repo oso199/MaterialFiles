@@ -64,9 +64,7 @@ class NonNegativeIntegerPreference : EditTextPreference {
     }
 
     override fun setText(text: String?) {
-        if (text == null) {
-            return
-        }
+        text ?: return
         integer = try {
             text.toInt()
         } catch (e: NumberFormatException) {
@@ -78,7 +76,7 @@ class NonNegativeIntegerPreference : EditTextPreference {
 
     override fun shouldDisableDependents(): Boolean = !isEnabled
 
-    override fun onSaveInstanceState(): Parcelable {
+    override fun onSaveInstanceState(): Parcelable? {
         val superState = super.onSaveInstanceState()
         if (isPersistent) {
             return superState

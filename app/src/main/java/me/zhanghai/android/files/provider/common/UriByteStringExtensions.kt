@@ -10,55 +10,48 @@ import kotlin.experimental.and
 import kotlin.experimental.or
 import kotlin.reflect.KClass
 
+// Note: The URI must have an authority, otherwise the Java URI class recognizes the rest of the URI
+// as scheme specific part and refuses to parse our query. As a result, our path must also either be
+// empty or absolute (beginning with a slash character).
+// @see https://datatracker.ietf.org/doc/html/rfc3986
 fun KClass<URI>.create(
-    scheme: String?,
-    schemeSpecificPart: ByteString?,
-    fragment: ByteString?
+    scheme: String,
+    authority: UriAuthority,
+    path: ByteString,
+    query: ByteString?
 ): URI {
     val builder = StringBuilder()
-    if (scheme != null) {
-        builder.append(scheme).append(':')
+    builder.append(scheme).append(':')
+    builder.append("//").append(authority.encode())
+    require(path.isEmpty() || path.startsWith("/".toByteString())) {
+        "Path $path must either be empty or begin with a slash character"
     }
-    if (schemeSpecificPart != null) {
-        builder.append(encodeSchemeSpecificPart(schemeSpecificPart))
-    }
-    if (fragment != null) {
-        builder.append('#').append(encodeFragment(fragment))
+    builder.append(encodePath(path))
+    if (query != null) {
+        builder.append('?').append(encodeQuery(query))
     }
     val uriString = builder.toString()
     return URI.create(uriString)
 }
 
+// @see java.net.URI
 private const val CHARSET_ALPHA = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz"
 private const val CHARSET_DIGIT = "0123456789"
 private const val CHARSET_UNRESERVED = "$CHARSET_ALPHA$CHARSET_DIGIT-._~"
 private const val CHARSET_SUB_DELIMS = "!$&'()*+,;="
 private const val CHARSET_PCHAR = "$CHARSET_UNRESERVED$CHARSET_SUB_DELIMS:@"
 private const val CHARSET_PATH = "$CHARSET_PCHAR/"
-private const val CHARSET_FRAGMENT = "$CHARSET_PCHAR/?"
+private const val CHARSET_QUERY = "$CHARSET_PCHAR/?"
 
-/*
- * @see java.net.URI#appendSchemeSpecificPart
- */
-private fun encodeSchemeSpecificPart(decoded: ByteString): String =
-    if (decoded.length >= 3 && decoded[0] == '/'.toByte() && decoded[1] == '/'.toByte()
-        && decoded[2] == '['.toByte()) {
-        val ipLiteralLastCharacterIndex = decoded.indexOf(']'.toByte(), 3)
-        require(ipLiteralLastCharacterIndex != -1) { "Incomplete IP literal in URI" }
-        val ipLiteralEnd = ipLiteralLastCharacterIndex + 1
-        (decoded.substring(0, ipLiteralEnd).toString()
-            + encode(decoded.substring(ipLiteralEnd), CHARSET_PATH))
-    } else {
-        encode(decoded, CHARSET_PATH)
-    }
+private fun encodePath(decoded: ByteString): String = encode(decoded, CHARSET_PATH)
 
-private fun encodeFragment(decoded: ByteString): String = encode(decoded, CHARSET_FRAGMENT)
+private fun encodeQuery(decoded: ByteString): String = encode(decoded, CHARSET_QUERY)
 
 private fun encode(decoded: ByteString, charset: String): String {
     val builder = StringBuilder()
     for (byte in decoded) {
-        if (charset.indexOf(byte.toChar()) != -1) {
-            builder.append(byte.toChar())
+        if (charset.indexOf(byte.toInt().toChar()) != -1) {
+            builder.append(byte.toInt().toChar())
         } else {
             builder
                 .append('%')
@@ -77,14 +70,11 @@ private fun encodeHexCharacter(halfByte: Byte): Char =
             throw IllegalArgumentException("Non-half-byte $halfByte for percent-encoding in URI")
     }
 
-val URI.decodedSchemeSpecificPartByteString: ByteString?
-    get() = rawSchemeSpecificPart?.let { decode(it) }
-
 val URI.decodedPathByteString: ByteString?
     get() = rawPath?.let { decode(it) }
 
-val URI.decodedFragmentByteString: ByteString?
-    get() = rawFragment?.let { decode(it) }
+val URI.decodedQueryByteString: ByteString?
+    get() = rawQuery?.let { decode(it) }
 
 private fun decode(encoded: String): ByteString {
     val builder = ByteStringBuilder()
@@ -93,7 +83,7 @@ private fun decode(encoded: String): ByteString {
     while (index < length) {
         var byte = getAsciiCharacterAt(encoded, index)
         when (byte) {
-            '%'.toByte() -> {
+            '%'.code.toByte() -> {
                 require(index + 3 <= length) { "Incomplete percent-encoding in URI" }
                 val halfByte1 = decodeHexCharacter(getAsciiCharacterAt(encoded, index + 1))
                 val halfByte2 = decodeHexCharacter(getAsciiCharacterAt(encoded, index + 2))
@@ -112,17 +102,19 @@ private fun decode(encoded: String): ByteString {
 
 private fun getAsciiCharacterAt(string: String, index: Int): Byte {
     val char = string[index]
-    require(char.toInt() == char.toInt() and 0x7F) { "Non-ASCII character $char in URI" }
-    return char.toByte()
+    require(char.code == char.code and 0x7F) { "Non-ASCII character $char in URI" }
+    return char.code.toByte()
 }
 
 private fun decodeHexCharacter(hexCharacter: Byte): Byte =
     when (hexCharacter) {
-        in '0'.toByte()..'9'.toByte() -> (hexCharacter.toChar() - '0').toByte()
-        in 'A'.toByte()..'F'.toByte() -> (10 + (hexCharacter.toChar() - 'A')).toByte()
-        in 'a'.toByte()..'f'.toByte() -> (10 + (hexCharacter.toChar() - 'a')).toByte()
+        in '0'.code.toByte()..'9'.code.toByte() -> (hexCharacter.toInt().toChar() - '0').toByte()
+        in 'A'.code.toByte()..'F'.code.toByte() ->
+            (10 + (hexCharacter.toInt().toChar() - 'A')).toByte()
+        in 'a'.code.toByte()..'f'.code.toByte() ->
+            (10 + (hexCharacter.toInt().toChar() - 'a')).toByte()
         else ->
             throw IllegalArgumentException(
-                "Non-hex-character ${hexCharacter.toChar()} for percent-encoding in URI"
+                "Non-hex-character ${hexCharacter.toInt().toChar()} for percent-encoding in URI"
             )
     }

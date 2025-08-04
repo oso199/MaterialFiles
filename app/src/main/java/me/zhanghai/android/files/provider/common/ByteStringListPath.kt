@@ -18,7 +18,6 @@ import me.zhanghai.android.files.util.hash
 import me.zhanghai.android.files.util.readParcelableListCompat
 import me.zhanghai.android.files.util.startsWith
 import java.net.URI
-import java.util.NoSuchElementException
 import kotlin.math.min
 
 abstract class ByteStringListPath<T : ByteStringListPath<T>> : AbstractPath<T>, Parcelable {
@@ -26,12 +25,13 @@ abstract class ByteStringListPath<T : ByteStringListPath<T>> : AbstractPath<T>, 
     private val isAbsolute: Boolean
     private val segments: List<ByteString>
 
+    @Volatile
     private var byteStringCache: ByteString? = null
 
     constructor(separator: Byte, path: ByteString) {
-        require(separator != '\u0000'.toByte()) { "Separator cannot be the nul character" }
+        require(separator != '\u0000'.code.toByte()) { "Separator cannot be the nul character" }
         this.separator = separator
-        if (path.contains('\u0000'.toByte())) {
+        if (path.contains('\u0000'.code.toByte())) {
             throw InvalidPathException(path.toString(), "Path cannot contain nul characters")
         }
         isAbsolute = isPathAbsolute(path)
@@ -91,7 +91,8 @@ abstract class ByteStringListPath<T : ByteStringListPath<T>> : AbstractPath<T>, 
         if (this === other) {
             return true
         }
-        if (other.javaClass != javaClass) {
+        if (javaClass != other.javaClass || provider != other.provider
+            || fileSystem != other.fileSystem) {
             return false
         }
         other as ByteStringListPath<*>
@@ -104,7 +105,8 @@ abstract class ByteStringListPath<T : ByteStringListPath<T>> : AbstractPath<T>, 
         if (this === other) {
             return true
         }
-        if (javaClass != other.javaClass) {
+        if (javaClass != other.javaClass || provider != other.provider
+            || fileSystem != other.fileSystem) {
             return false
         }
         other as ByteStringListPath<*>
@@ -142,8 +144,14 @@ abstract class ByteStringListPath<T : ByteStringListPath<T>> : AbstractPath<T>, 
     }
 
     override fun resolve(other: Path): T {
+        if (javaClass != other.javaClass || provider != other.provider) {
+            throw ProviderMismatchException(other.toString())
+        }
         @Suppress("UNCHECKED_CAST")
-        other as? T ?: throw ProviderMismatchException(other.toString())
+        other as T
+        require(fileSystem == other.fileSystem) {
+            "The other path must have the same file system as this path"
+        }
         if (other.isAbsolute) {
             return other
         }
@@ -163,9 +171,15 @@ abstract class ByteStringListPath<T : ByteStringListPath<T>> : AbstractPath<T>, 
     fun resolveSibling(other: ByteString): T = resolveSibling(createPath(other))
 
     override fun relativize(other: Path): T {
+        if (javaClass != other.javaClass || provider != other.provider) {
+            throw ProviderMismatchException(other.toString())
+        }
         @Suppress("UNCHECKED_CAST")
-        other as? T ?: throw ProviderMismatchException(other.toString())
-        require(other.isAbsolute == isAbsolute) {
+        other as T
+        require(fileSystem == other.fileSystem) {
+            "The other path must have the same file system as this path"
+        }
+        require(isAbsolute == other.isAbsolute) {
             "The other path must be as absolute as this path"
         }
         if (isEmpty) {
@@ -193,8 +207,7 @@ abstract class ByteStringListPath<T : ByteStringListPath<T>> : AbstractPath<T>, 
         return createPath(false, relativeSegments)
     }
 
-    override fun toUri(): URI =
-        URI::class.create(fileSystem.provider().scheme, uriSchemeSpecificPart, uriFragment)
+    override fun toUri(): URI = URI::class.create(uriScheme, uriAuthority, uriPath, uriQuery)
 
     override fun toAbsolutePath(): T {
         if (isAbsolute) {
@@ -240,16 +253,18 @@ abstract class ByteStringListPath<T : ByteStringListPath<T>> : AbstractPath<T>, 
         return separator == other.separator
             && segments == other.segments
             && isAbsolute == other.isAbsolute
-            // TODO: kotlinc: Cannot infer type parameter T in val <T : ByteStringListPath<T>>
-            //  ByteStringListPath<T>.fileSystem: FileSystem!
-            //&& fileSystem == other.fileSystem
-            && fileSystem == (other as Path).fileSystem
+            && fileSystem == other.fileSystem
     }
 
     override fun hashCode(): Int = hash(separator, segments, isAbsolute, fileSystem)
 
     override fun compareTo(other: Path): Int {
-        other as? ByteStringListPath<*> ?: throw ProviderMismatchException(other.toString())
+        javaClass.cast(other)
+        @Suppress("UNCHECKED_CAST")
+        other as T
+        if (provider != other.provider) {
+            throw ClassCastException(other.toString())
+        }
         return toByteString().compareTo(other.toByteString())
     }
 
@@ -282,10 +297,16 @@ abstract class ByteStringListPath<T : ByteStringListPath<T>> : AbstractPath<T>, 
 
     private fun createEmptyPath(): T = createPath(false, listOf(ByteString.EMPTY))
 
-    protected open val uriSchemeSpecificPart: ByteString?
+    protected open val uriScheme: String
+        get() = fileSystem.provider().scheme
+
+    protected open val uriAuthority: UriAuthority
+        get() = UriAuthority.EMPTY
+
+    protected open val uriPath: ByteString
         get() = toAbsolutePath().toByteString()
 
-    protected open val uriFragment: ByteString?
+    protected open val uriQuery: ByteString?
         get() = null
 
     protected abstract val defaultDirectory: T

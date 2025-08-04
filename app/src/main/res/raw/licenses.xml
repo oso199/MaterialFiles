@@ -22,6 +22,13 @@
     </notice>
 
     <notice>
+        <name>FullDraggableDrawer</name>
+        <url>https://github.com/PureWriter/FullDraggableDrawer</url>
+        <copyright>Copyright 2021 Drakeet Xu</copyright>
+        <license>Apache Software License 2.0</license>
+    </notice>
+
+    <notice>
         <name>Stetho</name>
         <url>https://github.com/facebook/stetho</url>
         <copyright>Copyright 2015 Facebook Inc.</copyright>
@@ -29,9 +36,23 @@
     </notice>
 
     <notice>
+        <name>dav4jvm</name>
+        <url>https://github.com/bitfireAT/dav4jvm</url>
+        <copyright>Copyright 2015 dav4jvm contributors</copyright>
+        <license>Mozilla Public License 2.0</license>
+    </notice>
+
+    <notice>
         <name>PhotoView</name>
         <url>https://github.com/chrisbanes/PhotoView</url>
         <copyright>Copyright 2011, 2012 Chris Banes</copyright>
+        <license>Apache Software License 2.0</license>
+    </notice>
+
+    <notice>
+        <name>libsu</name>
+        <url>https://github.com/topjohnwu/libsu</url>
+        <copyright>Copyright 2021 John "topjohnwu" Wu</copyright>
         <license>Apache Software License 2.0</license>
     </notice>
 
@@ -78,17 +99,38 @@
     </notice>
 
     <notice>
-        <name>librootjava</name>
-        <url>https://github.com/Chainfire/librootjava</url>
-        <copyright>Copyright 2018 Jorrit "Chainfire" Jongma</copyright>
+        <name>Apache Commons Net</name>
+        <url>https://commons.apache.org/proper/commons-net/</url>
+        <copyright>Copyright 2003 The Apache Software Foundation</copyright>
         <license>Apache Software License 2.0</license>
     </notice>
 
     <notice>
-        <name>libsuperuser</name>
-        <url>https://github.com/Chainfire/libsuperuser</url>
-        <copyright>Copyright 2012 Jorrit "Chainfire" Jongma</copyright>
+        <name>Insetter</name>
+        <url>https://github.com/chrisbanes/insetter</url>
+        <copyright>Copyright 2019 Google LLC</copyright>
         <license>Apache Software License 2.0</license>
+    </notice>
+
+    <notice>
+        <name>RikkaX</name>
+        <url>https://github.com/RikkaApps/RikkaX</url>
+        <copyright>Copyright 2017 Rikka</copyright>
+        <license>MIT License</license>
+    </notice>
+
+    <notice>
+        <name>Shizuku-API</name>
+        <url>https://github.com/RikkaApps/Shizuku-API</url>
+        <copyright>Copyright 2021 RikkaW</copyright>
+        <license>MIT License</license>
+    </notice>
+
+    <notice>
+        <name>jcifs-ng</name>
+        <url>https://github.com/AgNO3/jcifs-ng</url>
+        <copyright>Copyright 2016 AgNO3 Gmbh &amp; Co. KG</copyright>
+        <license>GNU Lesser General Public License 2.1</license>
     </notice>
 
     <notice>
@@ -102,13 +144,6 @@
         <name>AppIconLoader</name>
         <url>https://github.com/zhanghai/AppIconLoader</url>
         <copyright>Copyright 2020 Google LLC</copyright>
-        <license>Apache Software License 2.0</license>
-    </notice>
-
-    <notice>
-        <name>EffortlessPermissions</name>
-        <url>https://github.com/zhanghai/EffortlessPermissions</url>
-        <copyright>Copyright 2017 Hai Zhang</copyright>
         <license>Apache Software License 2.0</license>
     </notice>
 
@@ -127,16 +162,51 @@
     </notice>
 
     <notice>
-        <name>libselinux-android</name>
-        <url>https://github.com/zhanghai/libselinux-android</url>
-        <copyright>Copyright 2019 Hai Zhang</copyright>
+        <name>libarchive-android</name>
+        <url>https://github.com/zhanghai/libarchive-android</url>
+        <copyright>Copyright 2023 Google LLC</copyright>
         <license>Apache Software License 2.0</license>
     </notice>
 
     <notice>
-        <name>MaterialEditText</name>
-        <url>https://github.com/zhanghai/MaterialEditText</url>
-        <copyright>Copyright 2015 Hai Zhang</copyright>
+        <name>libarchive</name>
+        <url>https://github.com/libarchive/libarchive</url>
+        <copyright>Copyright 2003 Tim Kientzle</copyright>
+        <license>BSD 2-Clause License</license>
+    </notice>
+
+    <notice>
+        <name>bzip2</name>
+        <url>https://gitlab.com/bzip2/bzip2</url>
+        <copyright>Copyright 1996 Julian Seward</copyright>
+        <license>BSD 3-Clause License</license>
+    </notice>
+
+    <notice>
+        <name>lz4</name>
+        <url>https://github.com/lz4/lz4</url>
+        <copyright>Copyright 2011 Yann Collet</copyright>
+        <license>BSD 2-Clause License</license>
+    </notice>
+
+    <notice>
+        <name>zstd</name>
+        <url>https://github.com/facebook/zstd</url>
+        <copyright>Copyright Meta Platforms, Inc. and affiliates</copyright>
+        <license>BSD 3-Clause License</license>
+    </notice>
+
+    <notice>
+        <name>mbedtls</name>
+        <url>https://github.com/Mbed-TLS/mbedtls</url>
+        <copyright>Copyright The Mbed TLS Contributors</copyright>
+        <license>Apache Software License 2.0</license>
+    </notice>
+
+    <notice>
+        <name>libselinux-android</name>
+        <url>https://github.com/zhanghai/libselinux-android</url>
+        <copyright>Copyright 2019 Hai Zhang</copyright>
         <license>Apache Software License 2.0</license>
     </notice>
 
@@ -155,24 +225,10 @@
     </notice>
 
     <notice>
-        <name>Reflected</name>
-        <url>https://github.com/zhanghai/Reflected</url>
-        <copyright>Copyright 2018 Hai Zhang</copyright>
-        <license>Apache Software License 2.0</license>
-    </notice>
-
-    <notice>
         <name>android-retrostreams</name>
         <url>https://github.com/retrostreams/android-retrostreams</url>
         <copyright>Copyright 1994 Oracle and/or its affiliates</copyright>
         <license>GNU General Public License 2.0</license>
-    </notice>
-
-    <notice>
-        <name>Apache Commons Compress</name>
-        <url>https://commons.apache.org/proper/commons-compress/</url>
-        <copyright>Copyright 2002 The Apache Software Foundation</copyright>
-        <license>Apache Software License 2.0</license>
     </notice>
 
     <notice>

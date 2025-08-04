@@ -18,7 +18,7 @@ internal class DocumentPathObservable(
     path: DocumentPath,
     intervalMillis: Long
 ) : AbstractPathObservable(intervalMillis) {
-    private var cursor: Cursor
+    private val cursor: Cursor
 
     private val contentObserver = object : ContentObserver(handler) {
         override fun deliverSelfNotifications(): Boolean = true
@@ -57,7 +57,7 @@ internal class DocumentPathObservable(
             if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) {
                 val mimeType = DocumentResolver.getMimeType(this)
                 if (mimeType != MimeType.DIRECTORY.value) {
-                    return DocumentResolver.getDocumentChildrenUri(parent!!)
+                    parent?.let { return DocumentResolver.getDocumentChildrenUri(it) }
                 }
             }
             return DocumentResolver.getDocumentChildrenUri(this)

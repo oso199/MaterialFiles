@@ -19,7 +19,7 @@ import me.zhanghai.android.files.provider.common.ByteString
 import me.zhanghai.android.files.provider.common.ByteStringBuilder
 import me.zhanghai.android.files.provider.common.ByteStringListPathCreator
 import me.zhanghai.android.files.provider.common.toByteString
-import me.zhanghai.android.files.util.readParcelable
+import me.zhanghai.android.files.util.StableUriParceler
 import java.io.IOException
 
 internal class DocumentFileSystem(
@@ -116,18 +116,20 @@ internal class DocumentFileSystem(
     override fun describeContents(): Int = 0
 
     override fun writeToParcel(dest: Parcel, flags: Int) {
-        dest.writeParcelable(treeUri, flags)
+        //dest.writeParcelable(treeUri, flags)
+        with(StableUriParceler) { treeUri.write(dest, flags) }
     }
 
     companion object {
-        const val SEPARATOR = '/'.toByte()
+        const val SEPARATOR = '/'.code.toByte()
         private val SEPARATOR_BYTE_STRING = SEPARATOR.toByteString()
-        private const val SEPARATOR_STRING = SEPARATOR.toChar().toString()
+        private const val SEPARATOR_STRING = SEPARATOR.toInt().toChar().toString()
 
         @JvmField
         val CREATOR = object : Parcelable.Creator<DocumentFileSystem> {
             override fun createFromParcel(source: Parcel): DocumentFileSystem {
-                val treeUri = source.readParcelable<Uri>()!!
+                //val treeUri = source.readParcelable<Uri>()!!
+                val treeUri = StableUriParceler.create(source)!!
                 return DocumentFileSystemProvider.getOrNewFileSystem(treeUri)
             }
 

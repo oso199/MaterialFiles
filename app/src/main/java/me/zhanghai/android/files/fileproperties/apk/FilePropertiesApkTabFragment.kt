@@ -15,12 +15,13 @@ import me.zhanghai.android.files.compat.longVersionCodeCompat
 import me.zhanghai.android.files.file.FileItem
 import me.zhanghai.android.files.file.isApk
 import me.zhanghai.android.files.fileproperties.FilePropertiesTabFragment
-import me.zhanghai.android.files.provider.linux.isLinuxPath
 import me.zhanghai.android.files.util.ParcelableArgs
 import me.zhanghai.android.files.util.ParcelableParceler
 import me.zhanghai.android.files.util.Stateful
 import me.zhanghai.android.files.util.args
+import me.zhanghai.android.files.util.getQuantityString
 import me.zhanghai.android.files.util.getStringArray
+import me.zhanghai.android.files.util.isGetPackageArchiveInfoCompatible
 import me.zhanghai.android.files.util.viewModels
 
 class FilePropertiesApkTabFragment : FilePropertiesTabFragment() {
@@ -62,9 +63,33 @@ class FilePropertiesApkTabFragment : FilePropertiesTabFragment() {
                 R.string.file_properties_apk_target_sdk_version,
                 getSdkVersionText(applicationInfo.targetSdkVersion)
             )
+            val requestedPermissionsSize = packageInfo.requestedPermissions?.size ?: 0
+            addItemView(
+                R.string.file_properties_apk_requested_permissions,
+                if (requestedPermissionsSize == 0) {
+                    getString(R.string.file_properties_apk_requested_permissions_zero)
+                } else {
+                    getQuantityString(
+                        R.plurals.file_properties_apk_requested_permissions_positive_format,
+                        requestedPermissionsSize, requestedPermissionsSize
+                    )
+                }, if (requestedPermissionsSize == 0) {
+                    null
+                } else {
+                    {
+                        PermissionListDialogFragment.show(
+                            packageInfo.requestedPermissions, this@FilePropertiesApkTabFragment
+                        )
+                    }
+                }
+            )
             addItemView(
                 R.string.file_properties_apk_signature_digests,
-                apkInfo.signingCertificateDigests.joinToString("\n")
+                if (apkInfo.signingCertificateDigests.isNotEmpty()) {
+                    apkInfo.signingCertificateDigests.joinToString("\n")
+                } else {
+                    getString(R.string.file_properties_apk_signature_digests_empty)
+                }
             )
             if (apkInfo.pastSigningCertificateDigests.isNotEmpty()) {
                 addItemView(
@@ -86,7 +111,8 @@ class FilePropertiesApkTabFragment : FilePropertiesTabFragment() {
     }
 
     companion object {
-        fun isAvailable(file: FileItem): Boolean = file.mimeType.isApk && file.path.isLinuxPath
+        fun isAvailable(file: FileItem): Boolean =
+            file.mimeType.isApk && file.path.isGetPackageArchiveInfoCompatible
     }
 
     @Parcelize

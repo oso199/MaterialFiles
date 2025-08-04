@@ -27,24 +27,15 @@
 }
 
 # App
--keep class me.zhanghai.android.files.** extends androidx.appcompat.app.AppCompatViewInflater { *; }
 -keep class me.zhanghai.android.files.** implements androidx.appcompat.view.CollapsibleActionView { *; }
 -keep class me.zhanghai.android.files.provider.common.ByteString { *; }
 -keep class me.zhanghai.android.files.provider.linux.syscall.** { *; }
 -keepnames class * extends java.lang.Exception
 # For Class.getEnumConstants()
 -keepclassmembers enum * {
-  public static **[] values();
+    public static **[] values();
 }
 -keepnames class me.zhanghai.android.files.** implements android.os.Parcelable
-
-# Apache Commons Compress
--dontwarn org.apache.commons.compress.compressors.**
--dontwarn org.apache.commons.compress.archivers.**
-# me.zhanghai.android.files.provider.archive.archiver.ArchiveWriter.sTarArchiveEntryLinkFlagsField
--keepclassmembernames class org.apache.commons.compress.archivers.tar.TarArchiveEntry {
-    byte linkFlag;
-}
 
 # Apache FtpServer
 -keepclassmembers class * implements org.apache.mina.core.service.IoProcessor {
@@ -53,6 +44,14 @@
     public <init>();
 }
 
-# Stetho No-op
-# This library includes the no-op for stetho-okhttp3 which requires okhttp3, but we never used it.
--dontwarn com.facebook.stetho.okhttp3.StethoInterceptor
+# Bouncy Castle
+-keep class org.bouncycastle.jcajce.provider.** { *; }
+-keep class org.bouncycastle.jce.provider.** { *; }
+
+# SMBJ
+-dontwarn javax.el.**
+-dontwarn org.ietf.jgss.**
+-dontwarn sun.security.x509.X509Key
+
+# SMBJ-RPC
+-dontwarn java.rmi.UnmarshalException

@@ -6,6 +6,7 @@
 package me.zhanghai.android.files.provider.content
 
 import android.content.ContentResolver
+import android.os.Build
 import java8.nio.channels.FileChannel
 import java8.nio.channels.SeekableByteChannel
 import java8.nio.file.AccessDeniedException
@@ -24,7 +25,10 @@ import java8.nio.file.attribute.BasicFileAttributes
 import java8.nio.file.attribute.FileAttribute
 import java8.nio.file.attribute.FileAttributeView
 import java8.nio.file.spi.FileSystemProvider
+import me.zhanghai.android.files.file.MimeType
 import me.zhanghai.android.files.provider.common.ByteStringPath
+import me.zhanghai.android.files.provider.common.PathObservable
+import me.zhanghai.android.files.provider.common.PathObservableProvider
 import me.zhanghai.android.files.provider.common.open
 import me.zhanghai.android.files.provider.common.toAccessModes
 import me.zhanghai.android.files.provider.common.toOpenOptions
@@ -35,7 +39,7 @@ import java.io.InputStream
 import java.io.OutputStream
 import java.net.URI
 
-object ContentFileSystemProvider : FileSystemProvider() {
+object ContentFileSystemProvider : FileSystemProvider(), PathObservableProvider {
     private const val SCHEME = ContentResolver.SCHEME_CONTENT
 
     internal val fileSystem = ContentFileSystem(this)
@@ -203,13 +207,27 @@ object ContentFileSystemProvider : FileSystemProvider() {
     override fun checkAccess(path: Path, vararg modes: AccessMode) {
         path as? ContentPath ?: throw ProviderMismatchException(path.toString())
         val uri = path.uri!!
+        // This checks existence as well.
+        val mimeType = try {
+            Resolver.getMimeType(uri)
+        } catch (e: ResolverException) {
+            throw e.toFileSystemException(path.toString())
+        }
+        val isDirectory = mimeType == MimeType.DIRECTORY.value
+        if (isDirectory) {
+            // There's no elegant way to check access to a directory beyond its existence.
+            return
+        }
         val accessModes = modes.toAccessModes()
         if (accessModes.execute) {
             throw AccessDeniedException(path.toString())
         }
         if (accessModes.write) {
             try {
-                Resolver.openOutputStream(uri, "w").use {}
+                // Before Android 10, ParcelFileDescriptor.parseMode() parses "w" as "wt", and we would
+                // truncate the file to empty. So work around that with "wa" on older platforms.
+                val mode = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) "w" else "wa"
+                Resolver.openOutputStream(uri, mode).use {}
             } catch (e: ResolverException) {
                 throw e.toFileSystemException(path.toString())
             }
@@ -217,13 +235,6 @@ object ContentFileSystemProvider : FileSystemProvider() {
         if (accessModes.read) {
             try {
                 Resolver.openInputStream(uri, "r").use {}
-            } catch (e: ResolverException) {
-                throw e.toFileSystemException(path.toString())
-            }
-        }
-        if (!(accessModes.read || accessModes.write)) {
-            try {
-                Resolver.checkExistence(uri)
             } catch (e: ResolverException) {
                 throw e.toFileSystemException(path.toString())
             }
@@ -280,5 +291,12 @@ object ContentFileSystemProvider : FileSystemProvider() {
     ) {
         path as? ContentPath ?: throw ProviderMismatchException(path.toString())
         throw UnsupportedOperationException()
+    }
+
+    @Throws(IOException::class)
+    override fun observe(path: Path, intervalMillis: Long): PathObservable {
+        path as? ContentPath ?: throw ProviderMismatchException(path.toString())
+        val uri = path.uri!!
+        return ContentPathObservable(uri, intervalMillis)
     }
 }

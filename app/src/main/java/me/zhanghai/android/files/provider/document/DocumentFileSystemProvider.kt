@@ -6,6 +6,7 @@
 package me.zhanghai.android.files.provider.document
 
 import android.net.Uri
+import android.os.Build
 import android.os.ParcelFileDescriptor
 import androidx.core.net.toUri
 import java8.nio.channels.FileChannel
@@ -35,8 +36,8 @@ import me.zhanghai.android.files.provider.common.PathObservable
 import me.zhanghai.android.files.provider.common.PathObservableProvider
 import me.zhanghai.android.files.provider.common.Searchable
 import me.zhanghai.android.files.provider.common.WalkFileTreeSearchable
-import me.zhanghai.android.files.provider.common.decodedFragmentByteString
-import me.zhanghai.android.files.provider.common.decodedSchemeSpecificPartByteString
+import me.zhanghai.android.files.provider.common.decodedPathByteString
+import me.zhanghai.android.files.provider.common.decodedQueryByteString
 import me.zhanghai.android.files.provider.common.open
 import me.zhanghai.android.files.provider.common.toAccessModes
 import me.zhanghai.android.files.provider.common.toByteString
@@ -96,9 +97,9 @@ object DocumentFileSystemProvider : FileSystemProvider(), PathObservableProvider
     override fun getPath(uri: URI): Path {
         uri.requireSameScheme()
         val treeUri = uri.treeUri
-        val fragment = uri.decodedFragmentByteString
-            ?: throw IllegalArgumentException("URI must have a fragment")
-        return getOrNewFileSystem(treeUri).getPath(fragment)
+        val path = uri.decodedQueryByteString
+            ?: throw IllegalArgumentException("URI must have a query")
+        return getOrNewFileSystem(treeUri).getPath(path)
     }
 
     private fun URI.requireSameScheme() {
@@ -108,9 +109,10 @@ object DocumentFileSystemProvider : FileSystemProvider(), PathObservableProvider
 
     private val URI.treeUri: Uri
         get() {
-            val schemeSpecificPart = decodedSchemeSpecificPartByteString
-                ?: throw IllegalArgumentException("URI must have a scheme specific part")
-            return schemeSpecificPart.toString().toUri()
+            val path = decodedPathByteString
+                ?: throw IllegalArgumentException("URI must have a path")
+            // Drop the first character which is always a slash.
+            return path.toString().drop(1).toUri()
         }
 
     @Throws(IOException::class)
@@ -345,13 +347,27 @@ object DocumentFileSystemProvider : FileSystemProvider(), PathObservableProvider
     @Throws(IOException::class)
     override fun checkAccess(path: Path, vararg modes: AccessMode) {
         path as? DocumentPath ?: throw ProviderMismatchException(path.toString())
+        // This checks existence as well.
+        val mimeType = try {
+            DocumentResolver.getMimeType(path)
+        } catch (e: ResolverException) {
+            throw e.toFileSystemException(path.toString())
+        }
+        val isDirectory = mimeType == MimeType.DIRECTORY.value
+        if (isDirectory) {
+            // There's no elegant way to check access to a directory beyond its existence.
+            return
+        }
         val accessModes = modes.toAccessModes()
         if (accessModes.execute) {
             throw AccessDeniedException(path.toString())
         }
         if (accessModes.write) {
+            // Before Android 10, ParcelFileDescriptor.parseMode() parses "w" as "wt", and we would
+            // truncate the file to empty. So work around that with "wa" on older platforms.
+            val mode = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) "w" else "wa"
             try {
-                DocumentResolver.openOutputStream(path, "w").use {}
+                DocumentResolver.openOutputStream(path, mode).use {}
             } catch (e: ResolverException) {
                 throw e.toFileSystemException(path.toString())
             }
@@ -359,13 +375,6 @@ object DocumentFileSystemProvider : FileSystemProvider(), PathObservableProvider
         if (accessModes.read) {
             try {
                 DocumentResolver.openInputStream(path, "r").use {}
-            } catch (e: ResolverException) {
-                throw e.toFileSystemException(path.toString())
-            }
-        }
-        if (!(accessModes.read || accessModes.write)) {
-            try {
-                DocumentResolver.checkExistence(path)
             } catch (e: ResolverException) {
                 throw e.toFileSystemException(path.toString())
             }

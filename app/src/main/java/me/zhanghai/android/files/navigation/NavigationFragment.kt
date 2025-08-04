@@ -5,10 +5,8 @@
 
 package me.zhanghai.android.files.navigation
 
-import android.app.Activity
 import android.content.Intent
 import android.os.Bundle
-import android.os.storage.StorageVolume
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
@@ -17,18 +15,9 @@ import androidx.lifecycle.LifecycleOwner
 import androidx.recyclerview.widget.LinearLayoutManager
 import java8.nio.file.Path
 import me.zhanghai.android.files.databinding.NavigationFragmentBinding
-import me.zhanghai.android.files.file.DocumentTreeUri
-import me.zhanghai.android.files.file.asDocumentTreeUri
-import me.zhanghai.android.files.file.asDocumentTreeUriOrNull
-import me.zhanghai.android.files.file.releasePersistablePermission
-import me.zhanghai.android.files.file.takePersistablePermission
-import me.zhanghai.android.files.provider.document.documentTreeUri
-import me.zhanghai.android.files.provider.document.isDocumentPath
-import me.zhanghai.android.files.storage.AddSmbServerActivity
-import me.zhanghai.android.files.util.createIntent
+import me.zhanghai.android.files.util.startActivitySafe
 
-class NavigationFragment : Fragment(), NavigationItem.Listener,
-    ConfirmRemoveDocumentTreeDialogFragment.Listener, EditBookmarkDirectoryDialogFragment.Listener {
+class NavigationFragment : Fragment(), NavigationItem.Listener {
     private lateinit var binding: NavigationFragmentBinding
 
     private lateinit var adapter: NavigationListAdapter
@@ -52,22 +41,12 @@ class NavigationFragment : Fragment(), NavigationItem.Listener,
         //binding.recyclerView.setItemAnimator(new NoChangeAnimationItemAnimator());
         val context = requireContext()
         binding.recyclerView.layoutManager = LinearLayoutManager(context)
-        adapter = NavigationListAdapter(this)
+        adapter = NavigationListAdapter(this, context)
         binding.recyclerView.adapter = adapter
 
         val viewLifecycleOwner = viewLifecycleOwner
         NavigationItemListLiveData.observe(viewLifecycleOwner) { onNavigationItemsChanged(it) }
         listener.observeCurrentPath(viewLifecycleOwner) { onCurrentPathChanged(it) }
-    }
-
-    override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
-        when (requestCode) {
-            REQUEST_CODE_OPEN_DOCUMENT_TREE ->
-                if (resultCode == Activity.RESULT_OK) {
-                    data?.data?.asDocumentTreeUriOrNull()?.let { addDocumentTree(it) }
-                }
-            else -> super.onActivityResult(requestCode, resultCode, data)
-        }
     }
 
     private fun onNavigationItemsChanged(navigationItems: List<NavigationItem?>) {
@@ -89,40 +68,8 @@ class NavigationFragment : Fragment(), NavigationItem.Listener,
         listener.navigateToRoot(path)
     }
 
-    override fun onAddDocumentTree() {
-        startActivity(AddSmbServerActivity::class.createIntent())
-//        startActivityForResultSafe(
-//            DocumentTreeUri.createOpenIntent(), REQUEST_CODE_OPEN_DOCUMENT_TREE
-//        )
-    }
-
-    private fun addDocumentTree(treeUri: DocumentTreeUri) {
-        treeUri.takePersistablePermission()
-    }
-
-    override fun onRemoveDocumentTree(treeUri: DocumentTreeUri, storageVolume: StorageVolume?) {
-        ConfirmRemoveDocumentTreeDialogFragment.show(treeUri, storageVolume, this)
-    }
-
-    override fun removeDocumentTree(treeUri: DocumentTreeUri) {
-        treeUri.releasePersistablePermission()
-        val currentPath = listener.currentPath
-        if (currentPath.isDocumentPath
-            && currentPath.documentTreeUri.asDocumentTreeUri() == treeUri) {
-            listener.navigateToDefaultRoot()
-        }
-    }
-
-    override fun onEditBookmarkDirectory(bookmarkDirectory: BookmarkDirectory) {
-        EditBookmarkDirectoryDialogFragment.show(bookmarkDirectory, this)
-    }
-
-    override fun replaceBookmarkDirectory(bookmarkDirectory: BookmarkDirectory) {
-        BookmarkDirectories.replace(bookmarkDirectory)
-    }
-
-    override fun removeBookmarkDirectory(bookmarkDirectory: BookmarkDirectory) {
-        BookmarkDirectories.remove(bookmarkDirectory)
+    override fun launchIntent(intent: Intent) {
+        startActivitySafe(intent)
     }
 
     override fun closeNavigationDrawer() {
@@ -136,9 +83,5 @@ class NavigationFragment : Fragment(), NavigationItem.Listener,
         fun navigateToDefaultRoot()
         fun observeCurrentPath(owner: LifecycleOwner, observer: (Path) -> Unit)
         fun closeNavigationDrawer()
-    }
-
-    companion object {
-        private const val REQUEST_CODE_OPEN_DOCUMENT_TREE = 1
     }
 }

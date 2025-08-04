@@ -7,10 +7,10 @@ package me.zhanghai.android.files.fileproperties.permissions
 
 import android.app.Dialog
 import android.os.Bundle
-import android.text.Editable
 import androidx.annotation.StringRes
 import androidx.appcompat.app.AppCompatDialogFragment
 import androidx.core.view.isVisible
+import androidx.core.widget.doAfterTextChanged
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
@@ -24,7 +24,6 @@ import me.zhanghai.android.files.util.Failure
 import me.zhanghai.android.files.util.Loading
 import me.zhanghai.android.files.util.ParcelableArgs
 import me.zhanghai.android.files.util.SelectionLiveData
-import me.zhanghai.android.files.util.SimpleTextWatcher
 import me.zhanghai.android.files.util.Stateful
 import me.zhanghai.android.files.util.Success
 import me.zhanghai.android.files.util.args
@@ -55,23 +54,19 @@ abstract class SetPrincipalDialogFragment : AppCompatDialogFragment() {
                     selectionLiveData.value = id
                     pendingScrollToId = id
                 }
+
                 binding = SetPrincipalDialogBinding.inflate(context.layoutInflater)
-                binding.filterEdit.addTextChangedListener(object : SimpleTextWatcher {
-                    override fun afterTextChanged(text: Editable) {
-                        viewModel.filter = text.toString()
-                    }
-                })
+                binding.filterEdit.doAfterTextChanged { viewModel.filter = it!!.toString() }
                 binding.recyclerView.layoutManager = LinearLayoutManager(context)
                 adapter = createAdapter(selectionLiveData)
                 binding.recyclerView.adapter = adapter
                 binding.recursiveCheck.isVisible = args.file.attributes.isDirectory
+                setView(binding.root)
 
                 viewModel.filteredPrincipalListLiveData.observe(this@SetPrincipalDialogFragment) {
                     onFilteredPrincipalListChanged(it)
                 }
                 selectionLiveData.observe(this@SetPrincipalDialogFragment, adapter)
-
-                setView(binding.root)
             }
             .setPositiveButton(android.R.string.ok) { _, _ -> setPrincipal() }
             .setNegativeButton(android.R.string.cancel, null)

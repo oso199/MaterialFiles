@@ -63,7 +63,7 @@ fun Collator.getCollationKeyForFileName(source: String): CollationKey {
                     }
                 }
                 while (digits > 1) {
-                    result.append(':'.toByte())
+                    result.append(':'.code.toByte())
                     --digits
                 }
                 if (leadingZeros > 0) {
@@ -105,7 +105,7 @@ private class ByteArrayCollationKey(
 private fun ByteArray.unsignedCompareTo(other: ByteArray): Int {
     val size = size
     val otherSize = other.size
-    for (index in 0 until min(size, otherSize)) {
+    for (index in 0..<min(size, otherSize)) {
         val byte = this[index].toInt() and 0xFF
         val otherByte = other[index].toInt() and 0xFF
         if (byte < otherByte) {

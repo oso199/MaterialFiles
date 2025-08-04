@@ -57,6 +57,7 @@ class CoordinatorScrollingLinearLayout : LinearLayout, AttachedBehavior {
             .setSystemWindowInsets(Insets.of(0, 0, 0, insets.systemWindowInsetBottom))
             .build()
             .toWindowInsets()
+        requestLayout()
         return insets
     }
 
@@ -67,15 +68,15 @@ class CoordinatorScrollingLinearLayout : LinearLayout, AttachedBehavior {
             if (childView != null) {
                 val scrollingView = findScrollingView()
                 val scrollingChildView = scrollingView?.let { findChildView(it) }
-                if (childView != scrollingChildView) {
-                    childView.updateLayoutParams<MarginLayoutParams> {
-                        bottomMargin = bottomInsets.systemWindowInsetBottom
-                    }
-                } else {
+                if (childView == scrollingChildView) {
                     if (scrollingView.fitsSystemWindows) {
                         scrollingView.onApplyWindowInsets(bottomInsets)
                     } else {
                         scrollingView.updatePadding(bottom = bottomInsets.systemWindowInsetBottom)
+                    }
+                } else {
+                    childView.updateLayoutParams<MarginLayoutParams> {
+                        bottomMargin = bottomInsets.systemWindowInsetBottom
                     }
                 }
             }
@@ -84,7 +85,7 @@ class CoordinatorScrollingLinearLayout : LinearLayout, AttachedBehavior {
     }
 
     private fun findScrollingView(viewGroup: ViewGroup = this): View? {
-        for (index in 0 until viewGroup.childCount) {
+        for (index in 0..<viewGroup.childCount) {
             val view = viewGroup.getChildAt(index)
             if (view is ScrollingView) {
                 return view

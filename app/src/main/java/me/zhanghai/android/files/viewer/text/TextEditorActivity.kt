@@ -28,10 +28,10 @@ class TextEditorActivity : AppActivity() {
         }
     }
 
-    override fun onBackPressed() {
-        if (fragment.onBackPressed()) {
-            return
+    override fun onSupportNavigateUp(): Boolean {
+        if (fragment.onSupportNavigateUp()) {
+            return true
         }
-        super.onBackPressed()
+        return super.onSupportNavigateUp()
     }
 }

@@ -10,7 +10,6 @@ import android.content.Context
 import android.content.DialogInterface
 import android.os.Bundle
 import android.os.Parcel
-import android.text.Editable
 import android.view.WindowManager
 import android.widget.Button
 import android.widget.ImageView
@@ -20,14 +19,16 @@ import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatDialogFragment
 import androidx.core.view.isVisible
 import androidx.core.widget.NestedScrollView
+import androidx.core.widget.doAfterTextChanged
 import androidx.interpolator.view.animation.FastOutSlowInInterpolator
-import coil.clear
-import coil.loadAny
+import coil.dispose
+import coil.load
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import kotlinx.parcelize.Parceler
 import kotlinx.parcelize.Parcelize
 import kotlinx.parcelize.WriteWith
 import me.zhanghai.android.files.R
+import me.zhanghai.android.files.coil.AppIconPackageName
 import me.zhanghai.android.files.compat.requireViewByIdCompat
 import me.zhanghai.android.files.databinding.FileJobConflictDialogViewBinding
 import me.zhanghai.android.files.file.FileItem
@@ -35,12 +36,14 @@ import me.zhanghai.android.files.file.fileSize
 import me.zhanghai.android.files.file.formatShort
 import me.zhanghai.android.files.file.iconRes
 import me.zhanghai.android.files.file.lastModifiedInstant
+import me.zhanghai.android.files.filelist.appDirectoryPackageName
 import me.zhanghai.android.files.filelist.supportsThumbnail
+import me.zhanghai.android.files.provider.common.isEncrypted
 import me.zhanghai.android.files.util.ParcelableArgs
 import me.zhanghai.android.files.util.ParcelableState
 import me.zhanghai.android.files.util.RemoteCallback
-import me.zhanghai.android.files.util.SimpleTextWatcher
 import me.zhanghai.android.files.util.args
+import me.zhanghai.android.files.util.finish
 import me.zhanghai.android.files.util.getArgs
 import me.zhanghai.android.files.util.getState
 import me.zhanghai.android.files.util.layoutInflater
@@ -84,8 +87,9 @@ class FileJobConflictDialogFragment : AppCompatDialogFragment() {
                     }
                 )
                 bindFileItem(
-                    targetFile, binding.targetIconImage, binding.targetBadgeImage,
-                    binding.targetThumbnailImage, binding.targetDescriptionText
+                    targetFile, binding.targetIconImage, binding.targetThumbnailImage,
+                    binding.targetAppIconBadgeImage, binding.targetBadgeImage,
+                    binding.targetDescriptionText
                 )
                 binding.sourceNameText.setText(
                     if (isMerge) {
@@ -95,8 +99,9 @@ class FileJobConflictDialogFragment : AppCompatDialogFragment() {
                     }
                 )
                 bindFileItem(
-                    sourceFile, binding.sourceIconImage, binding.sourceBadgeImage,
-                    binding.sourceThumbnailImage, binding.sourceDescriptionText
+                    sourceFile, binding.sourceIconImage, binding.sourceThumbnailImage,
+                    binding.sourceAppIconBadgeImage, binding.sourceBadgeImage,
+                    binding.sourceDescriptionText
                 )
                 binding.showNameLayout.setOnClickListener {
                     val visible = !binding.nameLayout.isVisible
@@ -113,21 +118,17 @@ class FileJobConflictDialogFragment : AppCompatDialogFragment() {
                 }
                 val targetFileName = targetFile.path.fileName.toString()
                 binding.nameEdit.setTextWithSelection(targetFileName)
-                binding.nameEdit.addTextChangedListener(object : SimpleTextWatcher {
-                    override fun afterTextChanged(text: Editable) {
-                        val hasNewName = hasNewName()
-                        binding.allCheck.isEnabled = !hasNewName
-                        if (hasNewName) {
-                            binding.allCheck.isChecked = false
-                        }
-                        val positiveButton = requireDialog()
-                            .requireViewByIdCompat<Button>(android.R.id.button1)
-                        positiveButton.setText(
-                            if (hasNewName) R.string.rename else positiveButtonRes
-                        )
+                binding.nameEdit.doAfterTextChanged {
+                    val hasNewName = hasNewName()
+                    binding.allCheck.isEnabled = !hasNewName
+                    if (hasNewName) {
+                        binding.allCheck.isChecked = false
                     }
-                })
-                binding.resetNameButton.setOnClickListener {
+                    val positiveButton = requireDialog()
+                        .requireViewByIdCompat<Button>(android.R.id.button1)
+                    positiveButton.setText(if (hasNewName) R.string.rename else positiveButtonRes)
+                }
+                binding.nameLayout.setEndIconOnClickListener {
                     binding.nameEdit.setTextWithSelection(targetFileName)
                 }
                 if (savedInstanceState != null) {
@@ -138,7 +139,10 @@ class FileJobConflictDialogFragment : AppCompatDialogFragment() {
             .setNegativeButton(R.string.skip, ::onDialogButtonClick)
             .setNeutralButton(android.R.string.cancel, ::onDialogButtonClick)
             .create()
-            .apply { setCanceledOnTouchOutside(false) }
+            .apply {
+                setCanceledOnTouchOutside(false)
+                window!!.setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE)
+            }
     }
 
     /** @see me.zhanghai.android.files.filelist.FileListAdapter.onBindViewHolder */
@@ -146,33 +150,56 @@ class FileJobConflictDialogFragment : AppCompatDialogFragment() {
         file: FileItem,
         iconImage: ImageView,
         thumbnailImage: ImageView,
+        appIconBadgeImage: ImageView,
         badgeImage: ImageView,
         descriptionText: TextView
     ) {
         val path = file.path
-        iconImage.setImageResource(file.mimeType.iconRes)
-        iconImage.isVisible = true
-        thumbnailImage.clear()
-        thumbnailImage.setImageDrawable(null)
+        iconImage.apply {
+            isVisible = true
+            setImageResource(file.mimeType.iconRes)
+        }
         val attributes = file.attributes
-        if (file.supportsThumbnail) {
-            thumbnailImage.loadAny(path to attributes) {
-                listener { _, _ -> iconImage.isVisible = false }
+        thumbnailImage.apply {
+            dispose()
+            setImageDrawable(null)
+            val supportsThumbnail = file.supportsThumbnail
+            isVisible = supportsThumbnail
+            if (supportsThumbnail) {
+                load(path to attributes) {
+                    listener { _, _ -> iconImage.isVisible = false }
+                }
             }
         }
-        val badgeIconRes = if (file.attributesNoFollowLinks.isSymbolicLink) {
-            if (file.isSymbolicLinkBroken) {
-                R.drawable.error_badge_icon_18dp
+        appIconBadgeImage.apply {
+            dispose()
+            setImageDrawable(null)
+            val appDirectoryPackageName = file.appDirectoryPackageName
+            val hasAppIconBadge = appDirectoryPackageName != null
+            isVisible = hasAppIconBadge
+            if (hasAppIconBadge) {
+                load(AppIconPackageName(appDirectoryPackageName!!))
+            }
+        }
+        badgeImage.apply {
+            val badgeIconRes = if (file.attributesNoFollowLinks.isSymbolicLink) {
+                if (file.isSymbolicLinkBroken) {
+                    R.drawable.error_badge_icon_18dp
+                } else {
+                    R.drawable.symbolic_link_badge_icon_18dp
+                }
+            } else if (file.attributesNoFollowLinks.isEncrypted()) {
+                R.drawable.encrypted_badge_icon_18dp
             } else {
-                R.drawable.symbolic_link_badge_icon_18dp
+                null
             }
-        } else {
-            null
-        }
-        val hasBadge = badgeIconRes != null
-        badgeImage.isVisible = hasBadge
-        if (hasBadge) {
-            badgeImage.setImageResource(badgeIconRes!!)
+            val hasBadge = badgeIconRes != null
+            isVisible = hasBadge
+            if (hasBadge) {
+                setImageResource(badgeIconRes!!)
+            } else {
+                setImageDrawable(null)
+            }
         }
         val lastModificationTime = attributes.lastModifiedInstant
             .formatShort(descriptionText.context)
@@ -209,7 +236,7 @@ class FileJobConflictDialogFragment : AppCompatDialogFragment() {
             else -> throw AssertionError(which)
         }
         notifyListenerOnce(action, name, all)
-        requireActivity().finish()
+        finish()
     }
 
     private fun hasNewName(): Boolean {
@@ -226,10 +253,10 @@ class FileJobConflictDialogFragment : AppCompatDialogFragment() {
 
         if (binding.root.parent == null) {
             val dialog = requireDialog() as AlertDialog
+            dialog.window!!.clearFlags(WindowManager.LayoutParams.FLAG_ALT_FOCUSABLE_IM)
             val scrollView = dialog.requireViewByIdCompat<NestedScrollView>(R.id.scrollView)
             val linearLayout = scrollView.getChildAt(0) as LinearLayout
             linearLayout.addView(binding.root)
-            dialog.window!!.clearFlags(WindowManager.LayoutParams.FLAG_ALT_FOCUSABLE_IM)
         }
     }
 
@@ -237,7 +264,7 @@ class FileJobConflictDialogFragment : AppCompatDialogFragment() {
         super.onCancel(dialog)
 
         notifyListenerOnce(FileJobConflictAction.CANCELED, null, false)
-        requireActivity().finish()
+        finish()
     }
 
     fun onFinish() {
@@ -325,5 +352,7 @@ class FileJobConflictDialogFragment : AppCompatDialogFragment() {
     }
 
     @Parcelize
-    private class State(val isAllChecked: Boolean) : ParcelableState
+    private class State(
+        val isAllChecked: Boolean
+    ) : ParcelableState
 }

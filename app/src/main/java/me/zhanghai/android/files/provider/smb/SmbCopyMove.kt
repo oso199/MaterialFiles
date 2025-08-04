@@ -17,9 +17,10 @@ import me.zhanghai.android.files.provider.common.CopyOptions
 import me.zhanghai.android.files.provider.smb.client.Client
 import me.zhanghai.android.files.provider.smb.client.ClientException
 import me.zhanghai.android.files.provider.smb.client.FileInformation
+import me.zhanghai.android.files.util.enumSetOf
 import me.zhanghai.android.files.util.hasBits
 import java.io.IOException
-import java.util.EnumSet
+import java.io.InterruptedIOException
 
 internal object SmbCopyMove {
     @Throws(IOException::class)
@@ -67,7 +68,7 @@ internal object SmbCopyMove {
                 sourceInformation.fileAttributes, FileAttributes::class.java
             )
         } else {
-            EnumSet.of(FileAttributes.FILE_ATTRIBUTE_NORMAL)
+            enumSetOf(FileAttributes.FILE_ATTRIBUTE_NORMAL)
         }
         if (sourceIsRegularFile) {
             if (targetInformation != null) {
@@ -86,6 +87,7 @@ internal object SmbCopyMove {
                     copyOptions.progressIntervalMillis, copyOptions.progressListener
                 )
             } catch (e: ClientException) {
+                (e.cause as? InterruptedIOException)?.let { throw it }
                 e.maybeThrowInvalidFileNameException(target.toString())
                 throw e.toFileSystemException(target.toString())
             }
@@ -224,10 +226,12 @@ internal object SmbCopyMove {
         try {
             Client.delete(source)
         } catch (e: ClientException) {
-            try {
-                Client.delete(target)
-            } catch (e2: ClientException) {
-                e.addSuppressed(e2.toFileSystemException(target.toString()))
+            if (e.toFileSystemException(source.toString()) !is NoSuchFileException) {
+                try {
+                    Client.delete(target)
+                } catch (e2: ClientException) {
+                    e.addSuppressed(e2.toFileSystemException(target.toString()))
+                }
             }
             throw e.toFileSystemException(source.toString())
         }

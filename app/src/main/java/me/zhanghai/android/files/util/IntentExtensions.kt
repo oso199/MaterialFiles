@@ -5,28 +5,37 @@
 
 package me.zhanghai.android.files.util
 
-import android.app.Activity
+import android.content.Context
 import android.content.Intent
 import android.net.Uri
 import android.os.Parcelable
 import android.provider.MediaStore
 import android.provider.Settings
+import androidx.core.app.ShareCompat
 import me.zhanghai.android.files.app.appClassLoader
 import me.zhanghai.android.files.app.application
 import me.zhanghai.android.files.app.packageManager
+import me.zhanghai.android.files.compat.DocumentsContractCompat
+import me.zhanghai.android.files.compat.removeFlagsCompat
 import me.zhanghai.android.files.file.MimeType
 import me.zhanghai.android.files.file.intentType
 import kotlin.reflect.KClass
 
-fun <T : Activity> KClass<T>.createIntent(): Intent = Intent(application, java)
+fun <T : Context> KClass<T>.createIntent(): Intent = Intent(application, java)
 
-// TODO: Use androidx.core.app.ShareCompat?
 fun CharSequence.createSendTextIntent(htmlText: String? = null): Intent =
-    Intent()
-        .setAction(Intent.ACTION_SEND)
+    // The context parameter here is only used for passing calling activity information and starting
+    // chooser activity, neither of which we care about.
+    ShareCompat.IntentBuilder(application)
         .setType(MimeType.TEXT_PLAIN.value)
-        .putExtra(Intent.EXTRA_TEXT, this)
-        .apply { htmlText?.let { putExtra(Intent.EXTRA_HTML_TEXT, it) } }
+        .setText(this)
+        .apply { htmlText?.let { setHtmlText(it) } }
+        .intent
+        // FLAG_ACTIVITY_CLEAR_WHEN_TASK_RESET is unnecessarily added by ShareCompat.IntentBuilder.
+        .apply {
+            @Suppress("DEPRECATION")
+            removeFlagsCompat(Intent.FLAG_ACTIVITY_CLEAR_WHEN_TASK_RESET)
+        }
 
 fun KClass<Intent>.createLaunchApp(packageName: String): Intent? =
     packageManager.getLaunchIntentForPackage(packageName)
@@ -68,17 +77,17 @@ fun KClass<Intent>.createViewAppInMarket(packageName: String): Intent =
 fun KClass<Intent>.createViewLocation(latitude: Float, longitude: Float, label: String): Intent =
     Uri.parse("geo:0,0?q=$latitude,$longitude(${Uri.encode(label)})").createViewIntent()
 
-fun <T : Parcelable> Intent.getParcelableExtraSafe(key: String): T? {
+fun <T : Parcelable> Intent.getParcelableExtraSafe(key: String?): T? {
     setExtrasClassLoader(appClassLoader)
     return getParcelableExtra(key)
 }
 
-fun Intent.getParcelableArrayExtraSafe(key: String): Array<Parcelable>? {
+fun Intent.getParcelableArrayExtraSafe(key: String?): Array<Parcelable>? {
     setExtrasClassLoader(appClassLoader)
     return getParcelableArrayExtra(key)
 }
 
-fun <T : Parcelable?> Intent.getParcelableArrayListExtraSafe(key: String): ArrayList<T>? {
+fun <T : Parcelable?> Intent.getParcelableArrayListExtraSafe(key: String?): ArrayList<T>? {
     setExtrasClassLoader(appClassLoader)
     return getParcelableArrayListExtra(key)
 }
@@ -89,6 +98,12 @@ fun Intent.withChooser(title: CharSequence? = null, vararg initialIntents: Inten
     }
 
 fun Intent.withChooser(vararg initialIntents: Intent) = withChooser(null, *initialIntents)
+
+fun Uri.createEditIntent(mimeType: MimeType): Intent =
+    Intent(Intent.ACTION_EDIT)
+        // Calling setType() will clear data.
+        .setDataAndType(this, mimeType.intentType)
+        .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION)
 
 fun MimeType.createPickFileIntent(allowMultiple: Boolean = false) =
     Intent(Intent.ACTION_OPEN_DOCUMENT)
@@ -121,18 +136,27 @@ fun Uri.createSendImageIntent(text: CharSequence? = null): Intent =
     }
 
 fun Uri.createSendStreamIntent(mimeType: MimeType): Intent =
-    Intent(Intent.ACTION_SEND)
-        .putExtra(Intent.EXTRA_STREAM, this)
-        .setType(mimeType.intentType)
+    listOf(this).createSendStreamIntent(listOf(mimeType))
 
-fun Collection<Uri>.createSendStreamIntent(types: Collection<MimeType>): Intent =
-    if (size == 1) {
-        first().createSendStreamIntent(types.single())
-    } else {
-        Intent(Intent.ACTION_SEND_MULTIPLE)
-            .setType(types.intentType)
-            .putParcelableArrayListExtra(Intent.EXTRA_STREAM, ArrayList(this))
-    }
+fun Collection<Uri>.createSendStreamIntent(mimeTypes: Collection<MimeType>): Intent =
+    // Use ShareCompat.IntentBuilder for its migrateExtraStreamToClipData() because
+    // Intent.migrateExtraStreamToClipData() won't promote child ClipData and flags to the chooser
+    // intent, breaking third party share sheets.
+    // The context parameter here is only used for passing calling activity information and starting
+    // chooser activity, neither of which we care about.
+    ShareCompat.IntentBuilder(application)
+        .setType(mimeTypes.intentType)
+        .apply { forEach { addStream(it) } }
+        .intent
+        // FLAG_ACTIVITY_CLEAR_WHEN_TASK_RESET is unnecessarily added by ShareCompat.IntentBuilder.
+        .apply {
+            @Suppress("DEPRECATION")
+            removeFlagsCompat(Intent.FLAG_ACTIVITY_CLEAR_WHEN_TASK_RESET)
+        }
+
+fun Uri.createDocumentManagerViewDirectoryIntent(): Intent =
+    createViewIntent(MimeType.DIRECTORY)
+        .apply { DocumentsContractCompat.getDocumentsUiPackage()?.let { setPackage(it) } }
 
 fun Uri.createViewIntent(): Intent = Intent(Intent.ACTION_VIEW, this)
 

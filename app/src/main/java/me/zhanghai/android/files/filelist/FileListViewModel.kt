@@ -34,12 +34,7 @@ class FileListViewModel : ViewModel() {
 
     fun resetTo(path: Path) = trailLiveData.resetTo(path)
 
-    fun navigateUp(overrideBreadcrumb: Boolean): Boolean =
-        if (!overrideBreadcrumb && breadcrumbLiveData.valueCompat.selectedIndex == 0) {
-            false
-        } else {
-            trailLiveData.navigateUp()
-        }
+    fun navigateUp(): Boolean = trailLiveData.navigateUp()
 
     val currentPathLiveData = trailLiveData.map { it.currentPath }
     val currentPath: Path
@@ -102,6 +97,16 @@ class FileListViewModel : ViewModel() {
         }
 
     val breadcrumbLiveData: LiveData<BreadcrumbData> = BreadcrumbLiveData(trailLiveData)
+    val canNavigateUpBreadcrumb: Boolean
+        get() = breadcrumbLiveData.valueCompat.selectedIndex > 0
+
+    private val _viewTypeLiveData = FileViewTypeLiveData(currentPathLiveData)
+    val viewTypeLiveData: LiveData<FileViewType> = _viewTypeLiveData
+    var viewType: FileViewType
+        get() = _viewTypeLiveData.valueCompat
+        set(value) {
+            _viewTypeLiveData.putValue(value)
+        }
 
     private val _sortOptionsLiveData = FileSortOptionsLiveData(currentPathLiveData)
     val sortOptionsLiveData: LiveData<FileSortOptions> = _sortOptionsLiveData
@@ -115,13 +120,14 @@ class FileListViewModel : ViewModel() {
     fun setSortDirectoriesFirst(isDirectoriesFirst: Boolean) =
         _sortOptionsLiveData.putIsDirectoriesFirst(isDirectoriesFirst)
 
-    private val _sortPathSpecificLiveData = FileSortPathSpecificLiveData(currentPathLiveData)
-    val sortPathSpecificLiveData: LiveData<Boolean>
-        get() = _sortPathSpecificLiveData
-    var isSortPathSpecific: Boolean
-        get() = _sortPathSpecificLiveData.valueCompat
+    private val _viewSortPathSpecificLiveData =
+        FileViewSortPathSpecificLiveData(currentPathLiveData)
+    val viewSortPathSpecificLiveData: LiveData<Boolean>
+        get() = _viewSortPathSpecificLiveData
+    var isViewSortPathSpecific: Boolean
+        get() = _viewSortPathSpecificLiveData.valueCompat
         set(value) {
-            _sortPathSpecificLiveData.putValue(value)
+            _viewSortPathSpecificLiveData.putValue(value)
         }
 
     private val _pickOptionsLiveData = MutableLiveData<PickOptions?>()
@@ -210,6 +216,20 @@ class FileListViewModel : ViewModel() {
         pasteState.files.clear()
         _pasteStateLiveData.value = pasteState
     }
+
+    private val _isRequestingStorageAccessLiveData = MutableLiveData(false)
+    var isStorageAccessRequested: Boolean
+        get() = _isRequestingStorageAccessLiveData.valueCompat
+        set(value) {
+            _isRequestingStorageAccessLiveData.value = value
+        }
+
+    private val _isRequestingNotificationPermissionLiveData = MutableLiveData(false)
+    var isNotificationPermissionRequested: Boolean
+        get() = _isRequestingNotificationPermissionLiveData.valueCompat
+        set(value) {
+            _isRequestingNotificationPermissionLiveData.value = value
+        }
 
     override fun onCleared() {
         _fileListLiveData.close()

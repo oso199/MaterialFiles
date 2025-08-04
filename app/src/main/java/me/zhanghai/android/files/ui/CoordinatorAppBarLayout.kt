@@ -6,28 +6,22 @@
 package me.zhanghai.android.files.ui
 
 import android.content.Context
-import android.graphics.Canvas
+import android.content.res.ColorStateList
 import android.graphics.Color
 import android.graphics.Rect
 import android.os.Build
 import android.util.AttributeSet
 import android.view.View
 import androidx.annotation.AttrRes
-import androidx.coordinatorlayout.widget.CoordinatorLayout
 import androidx.core.graphics.ColorUtils
-import com.google.android.material.appbar.AppBarLayout
-import com.google.android.material.appbar.AppBarLayout.OnOffsetChangedListener
 import com.google.android.material.shape.MaterialShapeDrawable
-import com.google.android.material.shape.MaterialShapeUtils
 import me.zhanghai.android.files.util.activity
 
-class CoordinatorAppBarLayout : AppBarLayout {
-    private val tempConsumed = IntArray(2)
+class CoordinatorAppBarLayout : FitsSystemWindowsAppBarLayout {
+    private val syncBackgroundColorViews = mutableListOf<View>()
 
     private var offset = 0
     private val tempClipBounds = Rect()
-
-    private val syncBackgroundElevationViews = mutableListOf<View>()
 
     constructor(context: Context) : super(context)
 
@@ -40,28 +34,23 @@ class CoordinatorAppBarLayout : AppBarLayout {
     ) : super(context, attrs, defStyleAttr)
 
     init {
-        fitsSystemWindows = true
-
-        val background = background
-        val backgroundColor = (background as? MaterialShapeDrawable)?.fillColor?.defaultColor
-        if (backgroundColor != null) {
+        val defaultBackgroundColor = (background as? MaterialShapeDrawable)?.fillColor?.defaultColor
+        if (defaultBackgroundColor != null) {
             val window = context.activity!!.window
             val statusBarColor = window.statusBarColor
-            if (backgroundColor == statusBarColor
-                || backgroundColor == ColorUtils.setAlphaComponent(statusBarColor, 0xFF)) {
+            if (defaultBackgroundColor == statusBarColor
+                || defaultBackgroundColor == ColorUtils.setAlphaComponent(statusBarColor, 0xFF)) {
                 window.statusBarColor = Color.TRANSPARENT
             }
         }
 
-        addOnOffsetChangedListener(OnOffsetChangedListener { _, offset ->
+        addLiftOnScrollListener { _, backgroundColor ->
+            onBackgroundColorChanged(backgroundColor)
+        }
+
+        addOnOffsetChangedListener { _, offset ->
             this.offset = offset
             updateFirstChildClipBounds()
-        })
-
-        if (background is MaterialShapeDrawable) {
-            this.background = OnElevationChangedMaterialShapeDrawable(
-                background, context, this::onBackgroundElevationChanged
-            )
         }
     }
 
@@ -75,20 +64,15 @@ class CoordinatorAppBarLayout : AppBarLayout {
         }
     }
 
-    override fun draw(canvas: Canvas) {
-        if (isLiftOnScroll) {
-            val coordinatorLayout = parent as? CoordinatorLayout
-            if (coordinatorLayout != null) {
-                // Call AppBarLayout.Behavior.onNestedPreScroll() with dy == 0 to update lifted
-                // state.
-                val behavior = (layoutParams as CoordinatorLayout.LayoutParams).behavior!!
-                behavior.onNestedPreScroll(
-                    coordinatorLayout, this, coordinatorLayout, 0, 0, tempConsumed, 0
-                )
-            }
-        }
+    fun syncBackgroundColorTo(view: View) {
+        syncBackgroundColorViews += view
+    }
 
-        super.draw(canvas)
+    private fun onBackgroundColorChanged(backgroundColor: Int) {
+        syncBackgroundColorViews.forEach {
+            (it.background as? MaterialShapeDrawable)?.fillColor =
+                ColorStateList.valueOf(backgroundColor)
+        }
     }
 
     private fun updateFirstChildClipBounds() {
@@ -103,30 +87,5 @@ class CoordinatorAppBarLayout : AppBarLayout {
             }
         }
         firstChild.clipBounds = tempClipBounds
-    }
-
-    fun syncBackgroundElevationTo(view: View) {
-        syncBackgroundElevationViews += view
-    }
-
-    private fun onBackgroundElevationChanged(elevation: Float) {
-        syncBackgroundElevationViews.forEach { MaterialShapeUtils.setElevation(it, elevation) }
-    }
-
-    private class OnElevationChangedMaterialShapeDrawable(
-        drawable: MaterialShapeDrawable,
-        context: Context,
-        private val onElevationChanged: (Float) -> Unit
-    ) : MaterialShapeDrawable() {
-        init {
-            fillColor = drawable.fillColor
-            initializeElevationOverlay(context)
-        }
-
-        override fun setElevation(elevation: Float) {
-            super.setElevation(elevation)
-
-            onElevationChanged(elevation)
-        }
     }
 }

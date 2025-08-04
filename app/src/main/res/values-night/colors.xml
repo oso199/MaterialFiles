@@ -5,17 +5,19 @@
   ~ All Rights Reserved.
   -->
 
-<resources xmlns:tools="http://schemas.android.com/tools">
+<resources>
 
     <color name="system_window_scrim">@color/system_window_scrim_dark</color>
 
     <color name="system_window_scrim_compat">@color/system_window_scrim_dark</color>
 
-    <color name="system_window_scrim_black">@color/system_window_scrim_black_dark</color>
+    <color name="color_primary_dark_black">@color/system_window_scrim_dark_black</color>
 
     <color name="color_primary">@color/color_primary_dark</color>
 
     <color name="color_surface">@color/color_surface_dark</color>
+
+    <color name="activity_icon_tint">@color/secondary_text_default_material_dark</color>
 
     <color name="file_icon_light_blue">#6F9EF3</color>
     <color name="file_icon_blue">#4285F4</color>
@@ -29,6 +31,4 @@
     <color name="file_icon_red">#F28B82</color>
     <color name="file_icon_deep_red">#E8877F</color>
     <color name="file_icon_yellow">#F8CF5C</color>
-
-    <color name="sd_overlay_color" tools:ignore="MissingDefaultResource">#AA000000</color>
 </resources>

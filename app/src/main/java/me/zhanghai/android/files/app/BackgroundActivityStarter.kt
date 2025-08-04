@@ -18,7 +18,7 @@ import me.zhanghai.android.files.util.NotificationChannelTemplate
 import me.zhanghai.android.files.util.NotificationTemplate
 import me.zhanghai.android.files.util.startActivitySafe
 
-val backgroundActivityStartNotificationTemplate: NotificationTemplate =
+val backgroundActivityStartNotificationTemplate =
     NotificationTemplate(
         NotificationChannelTemplate(
             "background_activity_start",
@@ -27,7 +27,7 @@ val backgroundActivityStartNotificationTemplate: NotificationTemplate =
             descriptionRes = R.string.notification_channel_background_activity_start_description,
             showBadge = false
         ),
-        colorRes = R.color.color_primary_classic,
+        colorRes = R.color.color_primary,
         smallIcon = R.drawable.notification_icon,
         ongoing = true,
         autoCancel = true,

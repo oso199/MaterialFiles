@@ -15,6 +15,7 @@ import java8.nio.file.LinkOption
 import java8.nio.file.OpenOption
 import java8.nio.file.Path
 import java8.nio.file.ProviderMismatchException
+import java8.nio.file.StandardOpenOption
 import java8.nio.file.attribute.BasicFileAttributes
 import java8.nio.file.attribute.FileAttribute
 import java8.nio.file.attribute.FileAttributeView
@@ -62,7 +63,14 @@ fun Path.createDirectories(vararg attributes: FileAttribute<*>): Path =
     Files.createDirectories(this, *attributes)
 
 @Throws(IOException::class)
-fun Path.createFile(vararg attributes: FileAttribute<*>): Path = Files.createFile(this, *attributes)
+fun Path.createFile(vararg attributes: FileAttribute<*>): Path =
+    try {
+        // This uses newByteChannel() under the hood, which may not be supported.
+        Files.createFile(this, *attributes)
+    } catch (e: UnsupportedOperationException) {
+        Files.newOutputStream(this, StandardOpenOption.CREATE_NEW, StandardOpenOption.WRITE).close()
+        this
+    }
 
 @Throws(IOException::class)
 fun Path.createSymbolicLink(target: Path, vararg attributes: FileAttribute<*>): Path =
@@ -148,12 +156,12 @@ fun Path.newInputStream(vararg options: OpenOption): InputStream =
     InterruptedIOExceptionInputStream(Files.newInputStream(this, *options))
 
 private class InterruptedIOExceptionInputStream(
-    private val inputStream: InputStream
-) : InputStream() {
+    inputStream: InputStream
+) : DelegateInputStream(inputStream) {
     @Throws(IOException::class)
     override fun read(): Int =
         try {
-            inputStream.read()
+            super.read()
         } catch (e: ClosedByInterruptException) {
             throw e.toInterruptedIOException()
         }
@@ -161,7 +169,7 @@ private class InterruptedIOExceptionInputStream(
     @Throws(IOException::class)
     override fun read(b: ByteArray): Int =
         try {
-            inputStream.read(b)
+            super.read(b)
         } catch (e: ClosedByInterruptException) {
             throw e.toInterruptedIOException()
         }
@@ -169,14 +177,14 @@ private class InterruptedIOExceptionInputStream(
     @Throws(IOException::class)
     override fun read(b: ByteArray, off: Int, len: Int): Int =
         try {
-            inputStream.read(b, off, len)
+            super.read(b, off, len)
         } catch (e: ClosedByInterruptException) {
             throw e.toInterruptedIOException()
         }
 
     @Throws(IOException::class)
     override fun skip(n: Long): Long = try {
-            inputStream.skip(n)
+            super.skip(n)
         } catch (e: ClosedByInterruptException) {
             throw e.toInterruptedIOException()
         }
@@ -184,7 +192,7 @@ private class InterruptedIOExceptionInputStream(
     @Throws(IOException::class)
     override fun available(): Int =
         try {
-            inputStream.available()
+            super.available()
         } catch (e: ClosedByInterruptException) {
             throw e.toInterruptedIOException()
         }
@@ -192,26 +200,20 @@ private class InterruptedIOExceptionInputStream(
     @Throws(IOException::class)
     override fun close() {
         try {
-            inputStream.close()
+            super.close()
         } catch (e: ClosedByInterruptException) {
             throw e.toInterruptedIOException()
         }
-    }
-
-    override fun mark(readlimit: Int) {
-        inputStream.mark(readlimit)
     }
 
     @Throws(IOException::class)
     override fun reset() {
         try {
-            inputStream.reset()
+            super.reset()
         } catch (e: ClosedByInterruptException) {
             throw e.toInterruptedIOException()
         }
     }
-
-    override fun markSupported(): Boolean = inputStream.markSupported()
 }
 
 @Throws(IOException::class)
@@ -219,12 +221,12 @@ fun Path.newOutputStream(vararg options: OpenOption): OutputStream =
     InterruptedIOExceptionOutputStream(Files.newOutputStream(this, *options))
 
 private class InterruptedIOExceptionOutputStream(
-    private val outputStream: OutputStream
-) : OutputStream() {
+    outputStream: OutputStream
+) : DelegateOutputStream(outputStream) {
     @Throws(IOException::class)
     override fun write(b: Int) {
         try {
-            outputStream.write(b)
+            super.write(b)
         } catch (e: ClosedByInterruptException) {
             throw e.toInterruptedIOException()
         }
@@ -233,7 +235,7 @@ private class InterruptedIOExceptionOutputStream(
     @Throws(IOException::class)
     override fun write(b: ByteArray) {
         try {
-            outputStream.write(b)
+            super.write(b)
         } catch (e: ClosedByInterruptException) {
             throw e.toInterruptedIOException()
         }
@@ -242,7 +244,7 @@ private class InterruptedIOExceptionOutputStream(
     @Throws(IOException::class)
     override fun write(b: ByteArray, off: Int, len: Int) {
         try {
-            outputStream.write(b, off, len)
+            super.write(b, off, len)
         } catch (e: ClosedByInterruptException) {
             throw e.toInterruptedIOException()
         }
@@ -251,7 +253,7 @@ private class InterruptedIOExceptionOutputStream(
     @Throws(IOException::class)
     override fun flush() {
         try {
-            outputStream.flush()
+            super.flush()
         } catch (e: ClosedByInterruptException) {
             throw e.toInterruptedIOException()
         }
@@ -260,7 +262,7 @@ private class InterruptedIOExceptionOutputStream(
     @Throws(IOException::class)
     override fun close() {
         try {
-            outputStream.close()
+            super.close()
         } catch (e: ClosedByInterruptException) {
             throw e.toInterruptedIOException()
         }
@@ -317,24 +319,18 @@ fun Path.readSymbolicLinkByteString(): ByteString {
 
 // Can resolve path in a foreign provider.
 fun Path.resolveForeign(other: Path): Path {
-    // TODO: kotlinc: Type mismatch: inferred type is Path but ByteStringListPath<*> was expected
-    //asByteStringListPath()
-    this.asByteStringListPath()
+    asByteStringListPath()
     other.asByteStringListPath()
-    if (provider == other.provider) {
+    if (javaClass == other.javaClass && provider == other.provider
+        && fileSystem == other.fileSystem) {
         return resolve(other)
     }
-    // TODO: kotlinc: Cannot access 'isAbsolute': it is private in 'ByteStringListPath'
-    //if (otherPath.isAbsolute) {
-    if ((other as Path).isAbsolute) {
+    if (other.isAbsolute) {
         return other
     }
     if (other.isEmpty) {
         return this
     }
-    // TODO: kotlinc: None of the following functions can be called with the arguments supplied:
-    //  public abstract fun resolve(p0: Path!): Path! defined in java8.nio.file.Path
-    //  public abstract fun resolve(p0: String!): Path! defined in java8.nio.file.Path
     var result: ByteStringListPath<*> = this
     for (name in other.nameByteStrings) {
         result = result.resolve(name)

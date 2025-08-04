@@ -9,10 +9,9 @@ import android.os.Parcelable
 import android.provider.DocumentsContract
 import kotlinx.parcelize.Parcelize
 
-// TODO: https://youtrack.jetbrains.com/issue/KT-28512
-//inline class MimeType (val value: String) {
 @Parcelize
-data class MimeType (val value: String) : Parcelable {
+@JvmInline
+value class MimeType(val value: String) : Parcelable {
     val type: String
         get() = value.substring(0, value.indexOf('/'))
 
@@ -58,6 +57,7 @@ data class MimeType (val value: String) : Parcelable {
         val IMAGE_ANY = "image/*".asMimeType()
         val IMAGE_GIF = "image/gif".asMimeType()
         val IMAGE_SVG_XML = "image/svg+xml".asMimeType()
+        val PDF = "application/pdf".asMimeType()
         val TEXT_PLAIN = "text/plain".asMimeType()
         val GENERIC = "application/octet-stream".asMimeType()
 
@@ -76,19 +76,19 @@ fun String.asMimeType(): MimeType {
 private val String.isValidMimeType: Boolean
     get() {
         val indexOfSlash = indexOf('/')
-        if (indexOfSlash == -1 || indexOfSlash !in 1 until length) {
+        if (indexOfSlash == -1 || indexOfSlash !in 1..<length) {
             return false
         }
         val indexOfSemicolon = indexOf(';')
         if (indexOfSemicolon != -1) {
-            if (indexOfSemicolon !in indexOfSlash + 2 until length) {
+            if (indexOfSemicolon !in indexOfSlash + 2..<length) {
                 return false
             }
         }
         val indexOfPlus = indexOf('+')
         if (indexOfPlus != -1 && !(indexOfSemicolon != -1 && indexOfPlus > indexOfSemicolon)) {
-            if (indexOfPlus !in indexOfSlash + 2
-                until if (indexOfSemicolon != -1) indexOfSemicolon - 1 else length) {
+            if (indexOfPlus !in indexOfSlash + 2..<
+                if (indexOfSemicolon != -1) indexOfSemicolon - 1 else length) {
                 return false
             }
         }

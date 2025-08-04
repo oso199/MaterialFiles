@@ -7,9 +7,15 @@ package me.zhanghai.android.files.util
 
 import android.content.ActivityNotFoundException
 import android.content.Intent
+import android.content.res.ColorStateList
+import android.graphics.drawable.Drawable
 import android.os.Bundle
+import android.view.animation.Animation
+import android.view.animation.Interpolator
 import android.widget.Toast
+import androidx.activity.OnBackPressedCallback
 import androidx.annotation.AnimRes
+import androidx.annotation.AnyRes
 import androidx.annotation.ArrayRes
 import androidx.annotation.AttrRes
 import androidx.annotation.BoolRes
@@ -23,33 +29,54 @@ import androidx.annotation.InterpolatorRes
 import androidx.annotation.PluralsRes
 import androidx.fragment.app.Fragment
 import me.zhanghai.android.files.R
+import me.zhanghai.android.files.compat.checkSelfPermissionCompat
 import me.zhanghai.android.files.compat.getColorCompat
 import me.zhanghai.android.files.compat.getColorStateListCompat
 import me.zhanghai.android.files.compat.getDrawableCompat
 
-fun Fragment.getAnimation(@AnimRes id: Int) = requireContext().getAnimation(id)
+fun Fragment.addOnBackPressedCallback(callback: OnBackPressedCallback) {
+    requireActivity().onBackPressedDispatcher.addCallback(viewLifecycleOwner, callback)
+}
 
-fun Fragment.getBoolean(@BoolRes id: Int) = requireContext().getBoolean(id)
+fun Fragment.checkSelfPermission(permission: String): Int =
+    requireContext().checkSelfPermissionCompat(permission)
+
+fun Fragment.finish() {
+    requireActivity().finish()
+}
+
+fun Fragment.getAnimation(@AnimRes id: Int): Animation = requireContext().getAnimation(id)
+
+fun Fragment.getBoolean(@BoolRes id: Int): Boolean = requireContext().getBoolean(id)
 
 @ColorInt
-fun Fragment.getColor(@ColorRes id: Int) = requireContext().getColorCompat(id)
+fun Fragment.getColor(@ColorRes id: Int): Int = requireContext().getColorCompat(id)
 
-fun Fragment.getColorStateList(@ColorRes id: Int) = requireContext().getColorStateListCompat(id)
+fun Fragment.getColorStateList(@ColorRes id: Int): ColorStateList =
+    requireContext().getColorStateListCompat(id)
 
-fun Fragment.getDimension(@DimenRes id: Int) = requireContext().getDimension(id)
+@Dimension
+fun Fragment.getDimension(@DimenRes id: Int): Float = requireContext().getDimension(id)
 
-fun Fragment.getDimensionPixelOffset(@DimenRes id: Int) =
+@Dimension(unit = Dimension.DP)
+fun Fragment.getDimensionDp(@DimenRes id: Int): Float = requireContext().getDimensionDp(id)
+
+@Dimension
+fun Fragment.getDimensionPixelOffset(@DimenRes id: Int): Int =
     requireContext().getDimensionPixelOffset(id)
 
-fun Fragment.getDimensionPixelSize(@DimenRes id: Int) = requireContext().getDimensionPixelSize(id)
+@Dimension
+fun Fragment.getDimensionPixelSize(@DimenRes id: Int): Int =
+    requireContext().getDimensionPixelSize(id)
 
-fun Fragment.getDrawable(@DrawableRes id: Int) = requireContext().getDrawableCompat(id)
+fun Fragment.getDrawable(@DrawableRes id: Int): Drawable = requireContext().getDrawableCompat(id)
 
-fun Fragment.getFloat(@DimenRes id: Int) = requireContext().getFloat(id)
+fun Fragment.getFloat(@DimenRes id: Int): Float = requireContext().getFloat(id)
 
-fun Fragment.getInteger(@IntegerRes id: Int) = requireContext().getInteger(id)
+fun Fragment.getInteger(@IntegerRes id: Int): Int = requireContext().getInteger(id)
 
-fun Fragment.getInterpolator(@InterpolatorRes id: Int) = requireContext().getInterpolator(id)
+fun Fragment.getInterpolator(@InterpolatorRes id: Int): Interpolator =
+    requireContext().getInterpolator(id)
 
 fun Fragment.getQuantityString(@PluralsRes id: Int, quantity: Int): String =
     requireContext().getQuantityString(id, quantity)
@@ -64,6 +91,9 @@ fun Fragment.getQuantityText(@PluralsRes id: Int, quantity: Int): CharSequence =
     requireContext().getQuantityText(id, quantity)
 
 fun Fragment.getStringArray(@ArrayRes id: Int) = requireContext().getStringArray(id)
+
+fun Fragment.getTextArray(@ArrayRes id: Int): Array<CharSequence> =
+    requireContext().getTextArray(id)
 
 fun Fragment.getBooleanByAttr(@AttrRes attr: Int) = requireContext().getBooleanByAttr(attr)
 
@@ -85,6 +115,7 @@ fun Fragment.getDrawableByAttr(@AttrRes attr: Int) = requireContext().getDrawabl
 
 fun Fragment.getFloatByAttr(@AttrRes attr: Int) = requireContext().getFloatByAttr(attr)
 
+@AnyRes
 fun Fragment.getResourceIdByAttr(@AttrRes attr: Int): Int =
     requireContext().getResourceIdByAttr(attr)
 
@@ -111,6 +142,17 @@ fun Fragment.dpToDimensionPixelSize(@Dimension(unit = Dimension.DP) dp: Float) =
 @Dimension
 fun Fragment.dpToDimensionPixelSize(@Dimension(unit = Dimension.DP) dp: Int) =
     requireContext().dpToDimensionPixelSize(dp)
+
+@Dimension(unit = Dimension.DP)
+fun Fragment.dimensionToDp(@Dimension dimension: Float): Float =
+    requireContext().dimensionToDp(dimension)
+
+@Dimension(unit = Dimension.DP)
+fun Fragment.dimensionToDp(@Dimension dimension: Int): Float =
+    requireContext().dimensionToDp(dimension)
+
+fun Fragment.setResult(resultCode: Int, resultData: Intent? = null) =
+    requireActivity().setResult(resultCode, resultData)
 
 val Fragment.shortAnimTime
     get() = requireContext().shortAnimTime

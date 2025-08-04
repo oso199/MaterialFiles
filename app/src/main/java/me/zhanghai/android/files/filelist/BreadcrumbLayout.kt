@@ -7,9 +7,6 @@ package me.zhanghai.android.files.filelist
 
 import android.content.Context
 import android.content.res.ColorStateList
-import android.graphics.Color
-import android.graphics.drawable.Drawable
-import android.graphics.drawable.RippleDrawable
 import android.util.AttributeSet
 import android.view.View
 import android.widget.HorizontalScrollView
@@ -18,14 +15,10 @@ import androidx.annotation.AttrRes
 import androidx.annotation.StyleRes
 import androidx.appcompat.widget.PopupMenu
 import androidx.core.view.isVisible
-import com.google.android.material.shape.MaterialShapeDrawable
-import com.google.android.material.shape.ShapeAppearanceModel
 import java8.nio.file.Path
 import me.zhanghai.android.files.R
-import me.zhanghai.android.files.compat.foregroundCompat
 import me.zhanghai.android.files.databinding.BreadcrumbItemBinding
 import me.zhanghai.android.files.util.getColorByAttr
-import me.zhanghai.android.files.util.getColorStateListByAttr
 import me.zhanghai.android.files.util.getDimensionPixelSize
 import me.zhanghai.android.files.util.getResourceIdByAttr
 import me.zhanghai.android.files.util.layoutInflater
@@ -33,6 +26,8 @@ import me.zhanghai.android.files.util.withTheme
 
 class BreadcrumbLayout : HorizontalScrollView {
     private val tabLayoutHeight = context.getDimensionPixelSize(R.dimen.tab_layout_height)
+    // Using a color state list resource somehow results in red color in dark mode on API 21.
+    // Run `git revert 5bb2fd1` once we no longer support API 21.
     private val itemColor =
         ColorStateList(
             arrayOf(intArrayOf(android.R.attr.state_activated), intArrayOf()),
@@ -41,8 +36,9 @@ class BreadcrumbLayout : HorizontalScrollView {
                 context.getColorByAttr(android.R.attr.textColorSecondary)
             )
         )
-    private val popupContext =
-        context.withTheme(context.getResourceIdByAttr(R.attr.actionBarPopupTheme))
+    private val popupContext = context.withTheme(
+        context.getResourceIdByAttr(androidx.appcompat.R.attr.actionBarPopupTheme)
+    )
 
     private val itemsLayout: LinearLayout
 
@@ -78,17 +74,32 @@ class BreadcrumbLayout : HorizontalScrollView {
         addView(itemsLayout, LayoutParams(LayoutParams.WRAP_CONTENT, LayoutParams.MATCH_PARENT))
     }
 
+    override fun jumpDrawablesToCurrentState() {
+        // HACK: AppBarLayout.updateAppBarLayoutDrawableState() calls
+        // CoordinatorLayout.jumpDrawablesToCurrentState() to fix a pre-N visual bug according to a
+        // comment in AppBarLayout.BaseBehavior.onLayoutChild(), however that results in our ripple
+        // disappearing. One way to ignore that call path is to skip when we are in layout, so that
+        // we at least preserve the other call path upon being attached to window.
+        if (isInLayout) {
+            return
+        }
+        super.jumpDrawablesToCurrentState()
+    }
+
     override fun onMeasure(widthMeasureSpec: Int, heightMeasureSpec: Int) {
         val heightMode = MeasureSpec.getMode(heightMeasureSpec)
-        var heightMeasureSpec = heightMeasureSpec
-        if (heightMode == MeasureSpec.UNSPECIFIED || heightMode == MeasureSpec.AT_MOST) {
-            var height = tabLayoutHeight
-            if (heightMode == MeasureSpec.AT_MOST) {
-                height = height.coerceAtMost(MeasureSpec.getSize(heightMeasureSpec))
+        val newHeightMeasureSpec = if (heightMode != MeasureSpec.EXACTLY) {
+            val maximumHeight = if (heightMode == MeasureSpec.AT_MOST) {
+                MeasureSpec.getSize(heightMeasureSpec)
+            } else {
+                Int.MAX_VALUE
             }
-            heightMeasureSpec = MeasureSpec.makeMeasureSpec(height, MeasureSpec.EXACTLY)
+            val height = tabLayoutHeight.coerceAtMost(maximumHeight)
+            MeasureSpec.makeMeasureSpec(height, MeasureSpec.EXACTLY)
+        } else {
+            heightMeasureSpec
         }
-        super.onMeasure(widthMeasureSpec, heightMeasureSpec)
+        super.onMeasure(widthMeasureSpec, newHeightMeasureSpec)
     }
 
     override fun requestLayout() {
@@ -143,33 +154,22 @@ class BreadcrumbLayout : HorizontalScrollView {
     private fun inflateItemViews() {
         // HACK: Remove/add views at the front so that ripple remains correct, as we are potentially
         // collapsing/expanding breadcrumbs at the front.
-        for (index in data.paths.size until itemsLayout.childCount) {
+        for (index in data.paths.size..<itemsLayout.childCount) {
             itemsLayout.removeViewAt(0)
         }
-        for (index in itemsLayout.childCount until data.paths.size) {
+        for (index in itemsLayout.childCount..<data.paths.size) {
             val binding = BreadcrumbItemBinding.inflate(context.layoutInflater, itemsLayout, false)
-            binding.root.foregroundCompat = createItemForeground(binding.root.context)
             val menu = PopupMenu(popupContext, binding.root)
                 .apply { inflate(R.menu.file_list_breadcrumb) }
             binding.root.setOnLongClickListener {
                 menu.show()
                 true
             }
-            binding.textText.setTextColor(itemColor)
+            binding.text.setTextColor(itemColor)
             binding.arrowImage.imageTintList = itemColor
             binding.root.tag = binding to menu
             itemsLayout.addView(binding.root, 0)
         }
-    }
-
-    private fun createItemForeground(context: Context): Drawable {
-        val controlHighlightColor = context.getColorStateListByAttr(R.attr.colorControlHighlight)
-        val mask = MaterialShapeDrawable(
-            ShapeAppearanceModel.builder(
-                context, R.style.ShapeAppearance_MaterialFiles_Breadcrumb, 0
-            ).build()
-        ).apply { fillColor = ColorStateList.valueOf(Color.WHITE) }
-        return RippleDrawable(controlHighlightColor, null, mask)
     }
 
     private fun bindItemViews() {
@@ -177,7 +177,7 @@ class BreadcrumbLayout : HorizontalScrollView {
             @Suppress("UNCHECKED_CAST")
             val tag = itemsLayout.getChildAt(index).tag as Pair<BreadcrumbItemBinding, PopupMenu>
             val (binding, menu) = tag
-            binding.textText.text = data.nameProducers[index](binding.textText.context)
+            binding.text.text = data.nameProducers[index](binding.text.context)
             binding.arrowImage.isVisible = index != data.paths.size - 1
             binding.root.isActivated = index == data.selectedIndex
             val path = data.paths[index]

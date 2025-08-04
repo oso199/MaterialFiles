@@ -18,8 +18,8 @@ import me.zhanghai.android.files.provider.FileSystemProviders
 import me.zhanghai.android.files.provider.common.AbstractWatchService
 import me.zhanghai.android.files.provider.common.readAttributes
 import me.zhanghai.android.files.provider.linux.syscall.Constants
+import me.zhanghai.android.files.provider.linux.syscall.Syscall
 import me.zhanghai.android.files.provider.linux.syscall.SyscallException
-import me.zhanghai.android.files.provider.linux.syscall.Syscalls
 import me.zhanghai.android.files.util.hasBits
 import java.io.Closeable
 import java.io.FileDescriptor
@@ -33,7 +33,7 @@ import kotlin.coroutines.resume
 import kotlin.coroutines.resumeWithException
 import kotlin.coroutines.suspendCoroutine
 
-internal class LocalLinuxWatchService : AbstractWatchService() {
+internal class LocalLinuxWatchService : AbstractWatchService<LocalLinuxWatchKey>() {
     private val poller = Poller(this)
 
     init {
@@ -62,7 +62,7 @@ internal class LocalLinuxWatchService : AbstractWatchService() {
         return poller.register(path, kindSet)
     }
 
-    fun cancel(key: LocalLinuxWatchKey) {
+    override fun cancel(key: LocalLinuxWatchKey) {
         poller.cancel(key)
     }
 
@@ -73,7 +73,7 @@ internal class LocalLinuxWatchService : AbstractWatchService() {
 
     private class Poller(
         private val watchService: LocalLinuxWatchService
-    ) : Thread("LocalLinuxWatchService.Poller-" + id.getAndIncrement()), Closeable {
+    ) : Thread("LocalLinuxWatchService.Poller-${id.getAndIncrement()}"), Closeable {
         private val socketFds: Array<FileDescriptor>
 
         private var inotifyFd: FileDescriptor
@@ -91,14 +91,14 @@ internal class LocalLinuxWatchService : AbstractWatchService() {
         init {
             isDaemon = true
             try {
-                socketFds = Syscalls.socketpair(OsConstants.AF_UNIX, OsConstants.SOCK_STREAM, 0)
-                val flags = Syscalls.fcntl(socketFds[0], OsConstants.F_GETFL)
+                socketFds = Syscall.socketpair(OsConstants.AF_UNIX, OsConstants.SOCK_STREAM, 0)
+                val flags = Syscall.fcntl(socketFds[0], OsConstants.F_GETFL)
                 if (!flags.hasBits(OsConstants.O_NONBLOCK)) {
-                    Syscalls.fcntl(
+                    Syscall.fcntl(
                         socketFds[0], OsConstants.F_SETFL, flags or OsConstants.O_NONBLOCK
                     )
                 }
-                inotifyFd = Syscalls.inotify_init1(OsConstants.O_NONBLOCK)
+                inotifyFd = Syscall.inotify_init1(OsConstants.O_NONBLOCK)
             } catch (e: SyscallException) {
                 throw e.toFileSystemException(null)
             }
@@ -115,7 +115,7 @@ internal class LocalLinuxWatchService : AbstractWatchService() {
                                 var mask = eventKindsToMask(kinds)
                                 mask = maybeAddDontFollowMask(path, mask)
                                 val wd = try {
-                                    Syscalls.inotify_add_watch(inotifyFd, pathBytes, mask)
+                                    Syscall.inotify_add_watch(inotifyFd, pathBytes, mask)
                                 } catch (e: SyscallException) {
                                     continuation.resumeWithException(
                                         e.toFileSystemException(pathBytes.toString())
@@ -161,7 +161,7 @@ internal class LocalLinuxWatchService : AbstractWatchService() {
                                 if (key.isValid) {
                                     val wd = key.watchDescriptor
                                     try {
-                                        Syscalls.inotify_rm_watch(inotifyFd, wd)
+                                        Syscall.inotify_rm_watch(inotifyFd, wd)
                                     } catch (e: SyscallException) {
                                         e.toFileSystemException(key.watchable().toString())
                                             .printStackTrace()
@@ -191,7 +191,7 @@ internal class LocalLinuxWatchService : AbstractWatchService() {
                                 for (key in keys.values) {
                                     val wd = key.watchDescriptor
                                     try {
-                                        Syscalls.inotify_rm_watch(inotifyFd, wd)
+                                        Syscall.inotify_rm_watch(inotifyFd, wd)
                                     } catch (e: SyscallException) {
                                         continuation.resumeWithException(
                                             e.toFileSystemException(key.watchable().toString())
@@ -202,9 +202,9 @@ internal class LocalLinuxWatchService : AbstractWatchService() {
                                 }
                                 keys.clear()
                                 try {
-                                    Syscalls.close(inotifyFd)
-                                    Syscalls.close(socketFds[1])
-                                    Syscalls.close(socketFds[0])
+                                    Syscall.close(inotifyFd)
+                                    Syscall.close(socketFds[1])
+                                    Syscall.close(socketFds[0])
                                 } catch (e: SyscallException) {
                                     e.printStackTrace()
                                 }
@@ -234,7 +234,7 @@ internal class LocalLinuxWatchService : AbstractWatchService() {
                 }
             }
             try {
-                Syscalls.write(socketFds[1], ONE_BYTE)
+                Syscall.write(socketFds[1], ONE_BYTE)
             } catch (e: InterruptedIOException) {
                 continuation.resumeWithException(e)
             } catch (e: SyscallException) {
@@ -248,10 +248,10 @@ internal class LocalLinuxWatchService : AbstractWatchService() {
                 while (true) {
                     fds[0].revents = 0
                     fds[1].revents = 0
-                    Syscalls.poll(fds, -1)
+                    Syscall.poll(fds, -1)
                     if (fds[0].revents.toInt().hasBits(OsConstants.POLLIN)) {
                         val size = try {
-                            Syscalls.read(socketFds[0], ONE_BYTE)
+                            Syscall.read(socketFds[0], ONE_BYTE)
                         } catch (e: SyscallException) {
                             if (e.errno != OsConstants.EAGAIN) {
                                 throw e
@@ -272,7 +272,7 @@ internal class LocalLinuxWatchService : AbstractWatchService() {
                     }
                     if (fds[1].revents.toInt().hasBits(OsConstants.POLLIN)) {
                         val size = try {
-                            Syscalls.read(inotifyFd, inotifyBuffer)
+                            Syscall.read(inotifyFd, inotifyBuffer)
                         } catch (e: SyscallException) {
                             if (e.errno != OsConstants.EAGAIN) {
                                 throw e
@@ -286,7 +286,7 @@ internal class LocalLinuxWatchService : AbstractWatchService() {
                                 }
                                 continue
                             }
-                            val events = Syscalls.inotify_get_events(inotifyBuffer, 0, size)
+                            val events = Syscall.inotify_get_events(inotifyBuffer, 0, size)
                             for (event in events) {
                                 if (event.mask.hasBits(Constants.IN_Q_OVERFLOW)) {
                                     for (key in keys.values) {

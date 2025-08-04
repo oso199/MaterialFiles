@@ -5,52 +5,37 @@
 
 package me.zhanghai.android.files.provider.archive.archiver
 
-import android.os.Build
 import androidx.preference.PreferenceManager
-import eu.chainfire.librootjava.RootJava
+import java8.nio.channels.SeekableByteChannel
 import java8.nio.charset.StandardCharsets
-import java8.nio.file.AccessMode
-import java8.nio.file.NoSuchFileException
-import java8.nio.file.NotLinkException
 import java8.nio.file.Path
-import me.zhanghai.android.files.BuildConfig
 import me.zhanghai.android.files.R
-import me.zhanghai.android.files.compat.use
-import me.zhanghai.android.files.provider.common.IsDirectoryException
+import me.zhanghai.android.files.provider.common.DelegateForceableSeekableByteChannel
+import me.zhanghai.android.files.provider.common.DelegateInputStream
+import me.zhanghai.android.files.provider.common.DelegateNonForceableSeekableByteChannel
+import me.zhanghai.android.files.provider.common.ForceableChannel
+import me.zhanghai.android.files.provider.common.PosixFileMode
 import me.zhanghai.android.files.provider.common.PosixFileType
-import me.zhanghai.android.files.provider.common.checkAccess
-import me.zhanghai.android.files.provider.common.posixFileType
+import me.zhanghai.android.files.provider.common.newByteChannel
+import me.zhanghai.android.files.provider.common.newInputStream
 import me.zhanghai.android.files.provider.root.isRunningAsRoot
+import me.zhanghai.android.files.provider.root.rootContext
 import me.zhanghai.android.files.settings.Settings
 import me.zhanghai.android.files.util.valueCompat
-import org.apache.commons.compress.archivers.ArchiveEntry
-import org.apache.commons.compress.archivers.ArchiveInputStream
-import org.apache.commons.compress.archivers.ArchiveStreamFactory
-import org.apache.commons.compress.archivers.sevenz.SevenZArchiveEntry
-import org.apache.commons.compress.archivers.sevenz.SevenZFile
-import org.apache.commons.compress.archivers.tar.TarArchiveEntry
-import org.apache.commons.compress.archivers.zip.ZipArchiveEntry
-import org.apache.commons.compress.compressors.CompressorException
-import org.apache.commons.compress.compressors.CompressorStreamFactory
-import java.io.BufferedInputStream
 import java.io.Closeable
-import java.io.FileNotFoundException
 import java.io.IOException
 import java.io.InputStream
-import java.util.Date
-import org.apache.commons.compress.archivers.ArchiveException as ApacheArchiveException
+import java.nio.charset.Charset
 
 object ArchiveReader {
-    private val compressorStreamFactory = CompressorStreamFactory()
-    private val archiveStreamFactory = ArchiveStreamFactory()
-
     @Throws(IOException::class)
     fun readEntries(
         file: Path,
+        passwords: List<String>,
         rootPath: Path
-    ): Pair<Map<Path, ArchiveEntry>, Map<Path, List<Path>>> {
-        val entries = mutableMapOf<Path, ArchiveEntry>()
-        val rawEntries = readEntries(file)
+    ): Pair<Map<Path, ReadArchive.Entry>, Map<Path, List<Path>>> {
+        val entries = mutableMapOf<Path, ReadArchive.Entry>()
+        val rawEntries = readEntries(file, passwords)
         for (entry in rawEntries) {
             var path = rootPath.resolve(entry.name)
             // Normalize an absolute path to prevent path traversal attack.
@@ -64,10 +49,15 @@ object ArchiveReader {
                     // Don't allow a path to become the root path only after normalization.
                     continue
                 }
+            } else {
+                if (!entry.isDirectory) {
+                    // Ignore a root path that's not a directory
+                    continue
+                }
             }
             entries.getOrPut(path) { entry }
         }
-        entries.getOrPut(rootPath) { DirectoryArchiveEntry("") }
+        entries.getOrPut(rootPath) { createDirectoryEntry("") }
         val tree = mutableMapOf<Path, MutableList<Path>>()
         tree[rootPath] = mutableListOf()
         val paths = entries.keys.toList()
@@ -83,229 +73,42 @@ object ArchiveReader {
                 if (entries.containsKey(parentPath)) {
                     break
                 }
-                entries[parentPath] = DirectoryArchiveEntry(parentPath.toString())
+                entries[parentPath] = createDirectoryEntry(parentPath.toString())
                 path = parentPath
             }
         }
         return entries to tree
     }
 
+    private fun createDirectoryEntry(name: String): ReadArchive.Entry {
+        require(!name.endsWith("/")) { "name $name should not end with a slash" }
+        return ReadArchive.Entry(
+            name, false, null, null, null, PosixFileType.DIRECTORY, 0, null, null,
+            PosixFileMode.DIRECTORY_DEFAULT, null
+        )
+    }
+
     @Throws(IOException::class)
-    private fun readEntries(file: Path): List<ArchiveEntry> {
-        val javaFile = file.toFile()
-        val compressorType: String?
-        val archiveType = try {
-            javaFile.inputStream().buffered().use { inputStream ->
-                compressorType = try {
-                    // inputStream must be buffered for markSupported().
-                    CompressorStreamFactory.detect(inputStream)
-                } catch (e: CompressorException) {
-                    // Ignored.
-                    null
-                }
-                val compressorInputStream = if (compressorType != null) {
-                    compressorStreamFactory.createCompressorInputStream(compressorType, inputStream)
-                        .buffered()
-                } else {
-                    inputStream
-                }
-                try {
-                    // compressorInputStream must be buffered for markSupported().
-                    compressorInputStream.use { detectArchiveType(it) }
-                } catch (e: ApacheArchiveException) {
-                    throw ArchiveException(e)
-                } catch (e: CompressorException) {
-                    throw ArchiveException(e)
+    private fun readEntries(file: Path, passwords: List<String>): List<ReadArchive.Entry> {
+        val charset = archiveFileNameCharset
+        val (archive, closeable) = openArchive(file, passwords)
+        return closeable.use {
+            buildList {
+                while (true) {
+                    this += archive.readEntry(charset) ?: break
                 }
             }
-        } catch (e: FileNotFoundException) {
-            file.checkAccess(AccessMode.READ)
-            throw NoSuchFileException(file.toString()).apply { initCause(e) }
-        }
-        val encoding = archiveFileNameEncoding
-        if (compressorType == null) {
-            when (archiveType) {
-                ArchiveStreamFactory.ZIP ->
-                    return ZipFileCompat(javaFile, encoding).use { it.entries.toList() }
-                ArchiveStreamFactory.SEVEN_Z -> {
-                    if (Build.VERSION.SDK_INT < Build.VERSION_CODES.N) {
-                        throw IOException(UnsupportedOperationException("SevenZFile"))
-                    }
-                    return SevenZFile(javaFile).use { it.entries.toList() }
-                }
-                RarFile.RAR -> return RarFile(javaFile, encoding).use { it.entries.toList() }
-                // Unnecessary, but teaches lint that compressorType != null below might be false.
-                else -> {}
-            }
-        }
-        return try {
-            javaFile.inputStream().buffered().use { inputStream ->
-                val compressorInputStream = if (compressorType != null) {
-                    compressorStreamFactory.createCompressorInputStream(compressorType, inputStream)
-                } else {
-                    inputStream
-                }
-                compressorInputStream.use {
-                    archiveStreamFactory.createArchiveInputStream(
-                        archiveType, compressorInputStream, encoding
-                    ).use { archiveInputStream ->
-                        val entries = mutableListOf<ArchiveEntry>()
-                        while (true) {
-                            val entry = archiveInputStream.nextEntry ?: break
-                            entries += entry
-                        }
-                        entries
-                    }
-                }
-            }
-        } catch (e: FileNotFoundException) {
-            throw NoSuchFileException(file.toString()).apply { initCause(e) }
-        } catch (e: ApacheArchiveException) {
-            throw ArchiveException(e)
-        } catch (e: CompressorException) {
-            throw ArchiveException(e)
         }
     }
 
-    private val archiveFileNameEncoding: String
-        get() =
-            if (isRunningAsRoot) {
-                try {
-                    val context = RootJava.getPackageContext(BuildConfig.APPLICATION_ID)
-                    val sharedPreferences = PreferenceManager.getDefaultSharedPreferences(context)
-                    val key = context.getString(R.string.pref_key_archive_file_name_encoding)
-                    val defaultValue = context.getString(
-                        R.string.pref_default_value_archive_file_name_encoding
-                    )
-                    sharedPreferences.getString(key, defaultValue)!!
-                } catch (e: Exception) {
-                    e.printStackTrace()
-                    StandardCharsets.UTF_8.name()
-                }
-            } else {
-                Settings.ARCHIVE_FILE_NAME_ENCODING.valueCompat
-            }
-
     @Throws(IOException::class)
-    fun newInputStream(file: Path, entry: ArchiveEntry): InputStream {
-        if (entry.isDirectory) {
-            throw IsDirectoryException(file.toString())
-        }
-        val javaFile = file.toFile()
-        val compressorType: String?
-        val archiveType = try {
-            javaFile.inputStream().buffered().use { inputStream ->
-                compressorType = try {
-                    // inputStream must be buffered for markSupported().
-                    CompressorStreamFactory.detect(inputStream)
-                } catch (e: CompressorException) {
-                    // Ignored.
-                    null
-                }
-                val compressorInputStream = if (compressorType != null) {
-                    compressorStreamFactory.createCompressorInputStream(compressorType, inputStream)
-                        .buffered()
-                } else {
-                    inputStream
-                }
-                try {
-                    // compressorInputStream must be buffered for markSupported().
-                    compressorInputStream.use { detectArchiveType(it) }
-                } catch (e: ApacheArchiveException) {
-                    throw ArchiveException(e)
-                } catch (e: CompressorException) {
-                    throw ArchiveException(e)
-                }
-            }
-        } catch (e: FileNotFoundException) {
-            file.checkAccess(AccessMode.READ)
-            throw NoSuchFileException(file.toString()).apply { initCause(e) }
-        }
-        val encoding = archiveFileNameEncoding
-        if (compressorType == null) {
-            when (entry) {
-                is ZipArchiveEntry -> {
-                    var successful = false
-                    var zipFile: ZipFileCompat? = null
-                    var zipEntryInputStream: InputStream? = null
-                    return try {
-                        zipFile = ZipFileCompat(javaFile, encoding)
-                        zipEntryInputStream = zipFile.getInputStream(entry)
-                            ?: throw NoSuchFileException(file.toString())
-                        val inputStream = CloseableInputStream(zipEntryInputStream, zipFile)
-                        successful = true
-                        inputStream
-                    } finally {
-                        if (!successful) {
-                            zipEntryInputStream?.close()
-                            zipFile?.close()
-                        }
-                    }
-                }
-                is SevenZArchiveEntry -> {
-                    var successful = false
-                    var sevenZFile: SevenZFile? = null
-                    return try {
-                        sevenZFile = SevenZFile(javaFile)
-                        var inputStream: InputStream? = null
-                        while (true) {
-                            val currentEntry = sevenZFile.nextEntry ?: break
-                            if (currentEntry.name != entry.name) {
-                                continue
-                            }
-                            inputStream = SevenZArchiveEntryInputStream(sevenZFile, currentEntry)
-                            successful = true
-                            break
-                        }
-                        inputStream ?: throw NoSuchFileException(file.toString())
-                    } finally {
-                        if (!successful) {
-                            sevenZFile?.close()
-                        }
-                    }
-                }
-                is RarArchiveEntry -> {
-                    var successful = false
-                    var rarFile: RarFile? = null
-                    return try {
-                        rarFile = RarFile(javaFile, encoding)
-                        var inputStream: InputStream? = null
-                        while (true) {
-                            val currentEntry = rarFile.nextEntry ?: break
-                            if (currentEntry.name != entry.name) {
-                                continue
-                            }
-                            inputStream = rarFile.getInputStream(currentEntry)
-                            successful = true
-                            break
-                        }
-                        inputStream ?: throw NoSuchFileException(file.toString())
-                    } finally {
-                        if (!successful) {
-                            rarFile?.close()
-                        }
-                    }
-                }
-                // Unnecessary, but teaches lint that compressorType != null below might be false.
-                else -> {}
-            }
-        }
+    fun newInputStream(file: Path, passwords: List<String>, entry: ReadArchive.Entry): InputStream? {
+        val charset = archiveFileNameCharset
+        val (archive, closeable) = openArchive(file, passwords)
         var successful = false
-        var inputStream: BufferedInputStream? = null
-        var compressorInputStream: InputStream? = null
-        var archiveInputStream: ArchiveInputStream? = null
         return try {
-            inputStream = javaFile.inputStream().buffered()
-            compressorInputStream = if (compressorType != null) {
-                compressorStreamFactory.createCompressorInputStream(compressorType, inputStream)
-            } else {
-                inputStream
-            }
-            archiveInputStream = archiveStreamFactory.createArchiveInputStream(
-                archiveType, compressorInputStream, encoding
-            )
             while (true) {
-                val currentEntry = archiveInputStream.nextEntry ?: break
+                val currentEntry = archive.readEntry(charset) ?: break
                 if (currentEntry.name != entry.name) {
                     continue
                 }
@@ -313,124 +116,119 @@ object ArchiveReader {
                 break
             }
             if (successful) {
-                archiveInputStream
+                CloseableInputStream(archive.newDataInputStream(), closeable)
             } else {
-                throw NoSuchFileException(file.toString())
+                null
             }
-        } catch (e: FileNotFoundException) {
-            throw NoSuchFileException(file.toString()).apply { initCause(e) }
-        } catch (e: ApacheArchiveException) {
-            throw ArchiveException(e)
-        } catch (e: CompressorException) {
-            throw ArchiveException(e)
         } finally {
             if (!successful) {
-                archiveInputStream?.close()
-                compressorInputStream?.close()
-                inputStream?.close()
+                closeable.close()
             }
         }
     }
-
-    @Throws(ApacheArchiveException::class)
-    private fun detectArchiveType(inputStream: InputStream): String =
-        try {
-            RarFile.detect(inputStream)
-        } catch (e: IOException) {
-            throw ApacheArchiveException("RarFile.detect()", e)
-        } ?: ArchiveStreamFactory.detect(inputStream)
 
     @Throws(IOException::class)
-    fun readSymbolicLink(file: Path, entry: ArchiveEntry): String {
-        if (!isSymbolicLink(entry)) {
-            throw NotLinkException(file.toString())
+    private fun openArchive(
+        file: Path,
+        passwords: List<String>
+    ): Pair<ReadArchive, ArchiveCloseable> {
+        val channel = try {
+            CacheSizeSeekableByteChannel(file.newByteChannel())
+        } catch (e: Exception) {
+            e.printStackTrace()
+            null
         }
-        return if (entry is TarArchiveEntry) {
-            entry.linkName
-        } else {
-            newInputStream(file, entry).use { it.reader(StandardCharsets.UTF_8).readText() }
+        if (channel != null) {
+            var successful = false
+            try {
+                val archive = ReadArchive(channel, passwords)
+                successful = true
+                return archive to ArchiveCloseable(archive, channel)
+            } finally {
+                if (!successful) {
+                    channel.close()
+                }
+            }
+        }
+        val inputStream = file.newInputStream()
+        var successful = false
+        try {
+            val archive = ReadArchive(inputStream, passwords)
+            successful = true
+            return archive to ArchiveCloseable(archive, inputStream)
+        } finally {
+            if (!successful) {
+                inputStream.close()
+            }
         }
     }
 
-    private fun isSymbolicLink(entry: ArchiveEntry): Boolean =
-        entry.posixFileType == PosixFileType.SYMBOLIC_LINK
-
-    private class DirectoryArchiveEntry(name: String) : ArchiveEntry {
-        init {
-            require(!name.endsWith("/")) { "name $name should not end with a slash" }
+    // size() may be called repeatedly for ZIP and 7Z, so make it cached to improve performance.
+    private fun CacheSizeSeekableByteChannel(channel: SeekableByteChannel): SeekableByteChannel =
+        if (channel is ForceableChannel) {
+            CacheSizeForceableSeekableByteChannel(channel)
+        } else {
+            CacheSizeNonForceableSeekableByteChannel(channel)
         }
 
-        private val name = "$name/"
+    private class CacheSizeNonForceableSeekableByteChannel(
+        channel: SeekableByteChannel
+    ) : DelegateNonForceableSeekableByteChannel(channel) {
+        private val size: Long by lazy { super.size() }
 
-        override fun getName(): String = name
+        override fun size(): Long = size
+    }
 
-        override fun getSize(): Long = 0
+    private class CacheSizeForceableSeekableByteChannel(
+        channel: SeekableByteChannel
+    ) : DelegateForceableSeekableByteChannel(channel) {
+        private val size: Long by lazy { super.size() }
 
-        override fun isDirectory(): Boolean = true
+        override fun size(): Long = size
+    }
 
-        override fun getLastModifiedDate(): Date = Date(-1)
-
-        override fun equals(other: Any?): Boolean {
-            if (this === other) {
-                return true
+    private val archiveFileNameCharset: Charset
+        get() =
+            if (isRunningAsRoot) {
+                try {
+                    val sharedPreferences =
+                        PreferenceManager.getDefaultSharedPreferences(rootContext)
+                    val key = rootContext.getString(R.string.pref_key_archive_file_name_encoding)
+                    val defaultValue = rootContext.getString(
+                        R.string.pref_default_value_archive_file_name_encoding
+                    )
+                    Charset.forName(sharedPreferences.getString(key, defaultValue)!!)
+                } catch (e: Exception) {
+                    e.printStackTrace()
+                    StandardCharsets.UTF_8
+                }
+            } else {
+                Charset.forName(Settings.ARCHIVE_FILE_NAME_ENCODING.valueCompat)
             }
-            if (javaClass != other?.javaClass) {
-                return false
+
+    private class ArchiveCloseable(
+        private val archive: ReadArchive,
+        private val closeable: Closeable
+    ) : Closeable {
+        override fun close() {
+            @Suppress("ConvertTryFinallyToUseCall")
+            try {
+                archive.close()
+            } finally {
+                closeable.close()
             }
-            other as DirectoryArchiveEntry
-            return name == other.name
         }
-
-        override fun hashCode(): Int = name.hashCode()
     }
 
     private class CloseableInputStream(
-        private val inputStream: InputStream,
+        inputStream: InputStream,
         private val closeable: Closeable
-    ) : InputStream() {
-        @Throws(IOException::class)
-        override fun available(): Int = inputStream.available()
-
-        @Throws(IOException::class)
-        override fun read(): Int = inputStream.read()
-
-        @Throws(IOException::class)
-        override fun read(b: ByteArray): Int = inputStream.read(b)
-
-        @Throws(IOException::class)
-        override fun read(b: ByteArray, off: Int, len: Int): Int = inputStream.read(b, off, len)
-
+    ) : DelegateInputStream(inputStream) {
         @Throws(IOException::class)
         override fun close() {
-            inputStream.close()
+            super.close()
+
             closeable.close()
-        }
-    }
-
-    private class SevenZArchiveEntryInputStream(
-        private val file: SevenZFile,
-        private val entry: SevenZArchiveEntry
-    ) : InputStream() {
-        override fun available(): Int {
-            val size = entry.size
-            val read = file.statisticsForCurrentEntry
-                .uncompressedCount
-            val available = size - read
-            return available.coerceAtMost(Int.MAX_VALUE.toLong()).toInt()
-        }
-
-        @Throws(IOException::class)
-        override fun read(): Int = file.read()
-
-        @Throws(IOException::class)
-        override fun read(b: ByteArray): Int = file.read(b)
-
-        @Throws(IOException::class)
-        override fun read(b: ByteArray, off: Int, len: Int): Int = file.read(b, off, len)
-
-        @Throws(IOException::class)
-        override fun close() {
-            file.close()
         }
     }
 }

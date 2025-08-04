@@ -51,6 +51,7 @@ import me.zhanghai.android.files.provider.common.PosixPrincipal
 import me.zhanghai.android.files.provider.common.PosixUser
 import me.zhanghai.android.files.provider.common.ProgressCopyOption
 import me.zhanghai.android.files.provider.common.ReadOnlyFileSystemException
+import me.zhanghai.android.files.provider.common.UserActionRequiredException
 import me.zhanghai.android.files.provider.common.asByteStringListPath
 import me.zhanghai.android.files.provider.common.copyTo
 import me.zhanghai.android.files.provider.common.createDirectories
@@ -133,8 +134,12 @@ private fun FileJob.postNotification(
         //setContentIntent()
         if (showCancel) {
             val intent = FileJobReceiver.createIntent(id)
+            var pendingIntentFlags = PendingIntent.FLAG_UPDATE_CURRENT
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                pendingIntentFlags = pendingIntentFlags or PendingIntent.FLAG_IMMUTABLE
+            }
             val pendingIntent = PendingIntent.getBroadcast(
-                service, id + 1, intent, PendingIntent.FLAG_UPDATE_CURRENT
+                service, id + 1, intent, pendingIntentFlags
             )
             addAction(
                 R.drawable.close_icon_white_24dp, getString(android.R.string.cancel), pendingIntent
@@ -160,10 +165,7 @@ private fun FileJob.getTargetFileName(source: Path): Path {
         val archiveFile = source.archiveFile.asByteStringListPath()
         val archiveRoot = archiveFile.createArchiveRootPath()
         if (source == archiveRoot) {
-            // TODO: kotlinc: Cannot infer type parameter T in val <T : ByteStringListPath<T>>
-            //  ByteStringListPath<T>.fileSystem: FileSystem!
-            //return archiveFile.fileSystem.getPath(
-            return (archiveFile as Path).fileSystem.getPath(
+            return archiveFile.fileSystem.getPath(
                 archiveFile.fileNameByteString!!.asFileName().baseName
             )
         }
@@ -343,14 +345,16 @@ private fun FileJob.postTransferSizeNotification(
         val sizeString = size.asFileSize().formatHumanReadable(service)
         val transferredSizeString = transferredSize.asFileSize().formatHumanReadable(service)
         text = getString(
-            R.string.file_job_transfer_size_notification_text_one, transferredSizeString, sizeString
+            R.string.file_job_transfer_size_notification_text_one_format, transferredSizeString,
+            sizeString
         )
     } else {
         title = getQuantityString(titleMultipleRes, fileCount, fileCount, getFileName(target))
         val currentFileIndex = (transferInfo.transferredFileCount + 1)
             .coerceAtMost(fileCount)
         text = getString(
-            R.string.file_job_transfer_size_notification_text_multiple, currentFileIndex, fileCount
+            R.string.file_job_transfer_size_notification_text_multiple_format, currentFileIndex,
+            fileCount
         )
     }
     val max: Int
@@ -397,7 +401,8 @@ private fun FileJob.postTransferCountNotification(
         val transferredFileCount = transferInfo.transferredFileCount
         val currentFileIndex = (transferredFileCount + 1).coerceAtMost(fileCount)
         text = getString(
-            R.string.file_job_transfer_count_notification_text_multiple, currentFileIndex, fileCount
+            R.string.file_job_transfer_count_notification_text_multiple_format, currentFileIndex,
+            fileCount
         )
         max = fileCount
         progress = transferredFileCount
@@ -463,8 +468,24 @@ private class TransferInfo(scanInfo: ScanInfo, val target: Path?) {
     }
 }
 
+// TODO: Make invalid file name, remount etc user actions as well.
 @Throws(InterruptedIOException::class)
-private fun FileJob.showActionDialog(
+private fun FileJob.showUserAction(exception: UserActionRequiredException): Boolean =
+    try {
+        runBlocking {
+            suspendCoroutine { continuation ->
+                val userAction = exception.getUserAction(continuation, service)
+                BackgroundActivityStarter.startActivity(
+                    userAction.intent, userAction.title, userAction.message, service
+                )
+            }
+        }
+    } catch (e: InterruptedException) {
+        throw InterruptedIOException().apply { initCause(e) }
+    }
+
+@Throws(InterruptedIOException::class)
+private fun FileJob.showErrorDialog(
     title: CharSequence,
     message: CharSequence,
     readOnlyFileStore: PosixFileStore?,
@@ -472,17 +493,17 @@ private fun FileJob.showActionDialog(
     positiveButtonText: CharSequence?,
     negativeButtonText: CharSequence?,
     neutralButtonText: CharSequence?
-): ActionResult =
+): ErrorResult =
     try {
-        runBlocking<ActionResult> {
+        runBlocking {
             suspendCoroutine { continuation ->
                 BackgroundActivityStarter.startActivity(
-                    FileJobActionDialogActivity::class.createIntent().putArgs(
-                        FileJobActionDialogFragment.Args(
+                    FileJobErrorDialogActivity::class.createIntent().putArgs(
+                        FileJobErrorDialogFragment.Args(
                             title, message, readOnlyFileStore, showAll, positiveButtonText,
                             negativeButtonText, neutralButtonText
                         ) { action, isAll ->
-                            continuation.resume(ActionResult(action, isAll))
+                            continuation.resume(ErrorResult(action, isAll))
                         }
                     ), title, message, service
                 )
@@ -505,8 +526,8 @@ private fun FileJob.getReadOnlyFileStore(path: Path, exception: IOException): Po
     return if (fileStore.isReadOnly) fileStore else null
 }
 
-private class ActionResult(
-    val action: FileJobAction,
+private class ErrorResult(
+    val action: FileJobErrorAction,
     val isAll: Boolean
 )
 
@@ -517,7 +538,7 @@ private fun FileJob.showConflictDialog(
     type: CopyMoveType
 ): ConflictResult =
     try {
-        runBlocking<ConflictResult> {
+        runBlocking {
             suspendCoroutine { continuation ->
                 BackgroundActivityStarter.startActivity(
                     FileJobConflictDialogActivity::class.createIntent().putArgs(
@@ -526,8 +547,8 @@ private fun FileJob.showConflictDialog(
                         ) { action, name, all ->
                             continuation.resume(ConflictResult(action, name, all))
                         }
-                    ), FileJobConflictDialogActivity.getTitle(sourceFile, targetFile, service),
-                    FileJobConflictDialogActivity.getMessage(sourceFile, targetFile, type, service),
+                    ), FileJobConflictDialogFragment.getTitle(sourceFile, targetFile, service),
+                    FileJobConflictDialogFragment.getMessage(sourceFile, targetFile, type, service),
                     service
                 )
             }
@@ -578,28 +599,29 @@ private class ActionAllInfo(
 class ArchiveFileJob(
     private val sources: List<Path>,
     private val archiveFile: Path,
-    private val archiveType: String,
-    private val compressorType: String?
+    private val format: Int,
+    private val filter: Int,
+    private val password: String?
 ) : FileJob() {
     @Throws(IOException::class)
     override fun run() {
-        val scanInfo = scan(sources, R.plurals.file_job_archive_scan_notification_title)
+        val scanInfo = scan(sources, R.plurals.file_job_archive_scan_notification_title_format)
         val channel = archiveFile.newByteChannel(
             StandardOpenOption.CREATE_NEW, StandardOpenOption.WRITE
         )
         var successful = false
         try {
             channel.use {
-                ArchiveWriter(archiveType, compressorType, channel).use { writer ->
+                ArchiveWriter(channel, format, filter, password).use { writer ->
                     val transferInfo = TransferInfo(scanInfo, archiveFile)
                     for (source in sources) {
                         val target = getTargetFileName(source)
                         archiveRecursively(source, writer, target, transferInfo)
                         throwIfInterrupted()
                     }
-                    successful = true
                 }
             }
+            successful = true
         } finally {
             if (!successful) {
                 try {
@@ -669,7 +691,7 @@ private fun FileJob.archive(
         throw e
     } catch (e: IOException) {
         e.printStackTrace()
-        val result = showActionDialog(
+        val result = showErrorDialog(
             getString(R.string.file_job_archive_error_title_format, getFileName(file)),
             getString(
                 R.string.file_job_archive_error_message_format, getFileName(archiveFile),
@@ -682,7 +704,8 @@ private fun FileJob.archive(
             null
         )
         when (result.action) {
-            FileJobAction.NEGATIVE, FileJobAction.CANCELED -> throw InterruptedIOException()
+            FileJobErrorAction.NEGATIVE, FileJobErrorAction.CANCELED ->
+                throw InterruptedIOException()
             else -> throw AssertionError(result.action)
         }
     }
@@ -690,8 +713,8 @@ private fun FileJob.archive(
 
 private fun FileJob.postArchiveNotification(transferInfo: TransferInfo, currentFile: Path) {
     postTransferSizeNotification(
-        transferInfo, currentFile, R.string.file_job_archive_notification_title_one,
-        R.plurals.file_job_archive_notification_title_multiple
+        transferInfo, currentFile, R.string.file_job_archive_notification_title_one_format,
+        R.plurals.file_job_archive_notification_title_multiple_format
     )
 }
 
@@ -701,9 +724,9 @@ class CopyFileJob(private val sources: List<Path>, private val targetDirectory: 
         val isExtract = sources.all { it.isArchivePath }
         val scanInfo = scan(
             sources, if (isExtract) {
-                R.plurals.file_job_extract_scan_notification_title
+                R.plurals.file_job_extract_scan_notification_title_format
             } else {
-                R.plurals.file_job_copy_scan_notification_title
+                R.plurals.file_job_copy_scan_notification_title_format
             }
         )
         val transferInfo = TransferInfo(scanInfo, targetDirectory)
@@ -785,7 +808,7 @@ class CopyFileJob(private val sources: List<Path>, private val targetDirectory: 
             // /(?<=.) \(\d+\)$/
             var index = countEnd - 1
             // \)
-            if (index < 0 || fileName[index] != ')'.toByte()) {
+            if (index < 0 || fileName[index] != ')'.code.toByte()) {
                 break
             }
             --index
@@ -793,7 +816,7 @@ class CopyFileJob(private val sources: List<Path>, private val targetDirectory: 
             val digitsEndInclusive = index
             while (index >= 0) {
                 val b = fileName[index]
-                if (b < '0'.toByte() || b > '9'.toByte()) {
+                if (b < '0'.code.toByte() || b > '9'.code.toByte()) {
                     break
                 }
                 --index
@@ -808,12 +831,12 @@ class CopyFileJob(private val sources: List<Path>, private val targetDirectory: 
                 break
             }
             // \(
-            if (index < 0 || fileName[index] != '('.toByte()) {
+            if (index < 0 || fileName[index] != '('.code.toByte()) {
                 break
             }
             --index
             //
-            if (index < 0 || fileName[index] != ' '.toByte()) {
+            if (index < 0 || fileName[index] != ' '.code.toByte()) {
                 break
             }
             // (?<=.)
@@ -862,7 +885,7 @@ class CreateFileJob(private val path: Path, private val createDirectory: Boolean
 @Throws(IOException::class)
 private fun FileJob.create(path: Path, createDirectory: Boolean) {
     var retry: Boolean
-    loop@ do {
+    do {
         retry = false
         try {
             if (createDirectory) {
@@ -874,7 +897,14 @@ private fun FileJob.create(path: Path, createDirectory: Boolean) {
             throw e
         } catch (e: IOException) {
             e.printStackTrace()
-            val result = showActionDialog(
+            if (e is UserActionRequiredException) {
+                val result = showUserAction(e)
+                if (result) {
+                    retry = true
+                    continue
+                }
+            }
+            val result = showErrorDialog(
                 getString(R.string.file_job_create_error_title),
                 getString(
                     R.string.file_job_create_error_message_format, getFileName(path), e.toString()
@@ -886,11 +916,12 @@ private fun FileJob.create(path: Path, createDirectory: Boolean) {
                 null
             )
             when (result.action) {
-                FileJobAction.POSITIVE -> {
+                FileJobErrorAction.POSITIVE -> {
                     retry = true
-                    continue@loop
+                    continue
                 }
-                FileJobAction.NEGATIVE, FileJobAction.CANCELED -> throw InterruptedIOException()
+                FileJobErrorAction.NEGATIVE, FileJobErrorAction.CANCELED ->
+                    throw InterruptedIOException()
                 else -> throw AssertionError(result.action)
             }
         }
@@ -900,7 +931,7 @@ private fun FileJob.create(path: Path, createDirectory: Boolean) {
 class DeleteFileJob(private val paths: List<Path>) : FileJob() {
     @Throws(IOException::class)
     override fun run() {
-        val scanInfo = scan(paths, R.plurals.file_job_delete_scan_notification_title)
+        val scanInfo = scan(paths, R.plurals.file_job_delete_scan_notification_title_format)
         val transferInfo = TransferInfo(scanInfo, null)
         val actionAllInfo = ActionAllInfo()
         for (path in paths) {
@@ -949,7 +980,7 @@ class DeleteFileJob(private val paths: List<Path>) : FileJob() {
 @Throws(IOException::class)
 private fun FileJob.delete(path: Path, transferInfo: TransferInfo?, actionAllInfo: ActionAllInfo) {
     var retry: Boolean
-    loop@ do {
+    do {
         retry = false
         try {
             path.delete()
@@ -968,7 +999,14 @@ private fun FileJob.delete(path: Path, transferInfo: TransferInfo?, actionAllInf
                 }
                 return
             }
-            val result = showActionDialog(
+            if (e is UserActionRequiredException) {
+                val result = showUserAction(e)
+                if (result) {
+                    retry = true
+                    continue
+                }
+            }
+            val result = showErrorDialog(
                 getString(R.string.file_job_delete_error_title),
                 getString(
                     R.string.file_job_delete_error_message_format, getFileName(path), e.toString()
@@ -980,11 +1018,11 @@ private fun FileJob.delete(path: Path, transferInfo: TransferInfo?, actionAllInf
                 getString(android.R.string.cancel)
             )
             when (result.action) {
-                FileJobAction.POSITIVE -> {
+                FileJobErrorAction.POSITIVE -> {
                     retry = true
-                    continue@loop
+                    continue
                 }
-                FileJobAction.NEGATIVE -> {
+                FileJobErrorAction.NEGATIVE -> {
                     if (result.isAll) {
                         actionAllInfo.skipDeleteError = true
                     }
@@ -994,14 +1032,14 @@ private fun FileJob.delete(path: Path, transferInfo: TransferInfo?, actionAllInf
                     }
                     return
                 }
-                FileJobAction.CANCELED -> {
+                FileJobErrorAction.CANCELED -> {
                     if (transferInfo != null) {
                         transferInfo.skipFileIgnoringSize()
                         postDeleteNotification(transferInfo, path)
                     }
                     return
                 }
-                FileJobAction.NEUTRAL -> throw InterruptedIOException()
+                FileJobErrorAction.NEUTRAL -> throw InterruptedIOException()
                 else -> throw AssertionError(result.action)
             }
         }
@@ -1010,8 +1048,8 @@ private fun FileJob.delete(path: Path, transferInfo: TransferInfo?, actionAllInf
 
 private fun FileJob.postDeleteNotification(transferInfo: TransferInfo, currentPath: Path) {
     postTransferCountNotification(
-        transferInfo, currentPath, R.string.file_job_delete_notification_title_one,
-        R.plurals.file_job_delete_notification_title_multiple
+        transferInfo, currentPath, R.string.file_job_delete_notification_title_one_format,
+        R.plurals.file_job_delete_notification_title_multiple_format
     )
 }
 
@@ -1030,7 +1068,7 @@ class MoveFileJob(private val sources: List<Path>, private val targetDirectory: 
             }
             throwIfInterrupted()
         }
-        val scanInfo = scan(sourcesToMove, R.plurals.file_job_move_scan_notification_title)
+        val scanInfo = scan(sourcesToMove, R.plurals.file_job_move_scan_notification_title_format)
         val transferInfo = TransferInfo(scanInfo, targetDirectory)
         val actionAllInfo = ActionAllInfo()
         for (source in sourcesToMove) {
@@ -1148,7 +1186,7 @@ private fun FileJob.copyOrMove(
             postCopyMoveNotification(transferInfo, source, type)
             return false
         }
-        val result = showActionDialog(
+        val result = showErrorDialog(
             getString(
                 type.getResourceId(
                     R.string.file_job_cannot_copy_into_itself_title,
@@ -1164,7 +1202,7 @@ private fun FileJob.copyOrMove(
             null
         )
         return when (result.action) {
-            FileJobAction.POSITIVE -> {
+            FileJobErrorAction.POSITIVE -> {
                 if (result.isAll) {
                     actionAllInfo.skipCopyMoveIntoItself = true
                 }
@@ -1172,12 +1210,12 @@ private fun FileJob.copyOrMove(
                 postCopyMoveNotification(transferInfo, source, type)
                 false
             }
-            FileJobAction.CANCELED -> {
+            FileJobErrorAction.CANCELED -> {
                 transferInfo.skipFile(source)
                 postCopyMoveNotification(transferInfo, source, type)
                 false
             }
-            FileJobAction.NEGATIVE -> throw InterruptedIOException()
+            FileJobErrorAction.NEGATIVE -> throw InterruptedIOException()
             else -> throw AssertionError(result.action)
         }
     }
@@ -1188,7 +1226,7 @@ private fun FileJob.copyOrMove(
             postCopyMoveNotification(transferInfo, source, type)
             return false
         }
-        val result = showActionDialog(
+        val result = showErrorDialog(
             getString(
                 type.getResourceId(
                     R.string.file_job_cannot_copy_over_itself_title,
@@ -1204,7 +1242,7 @@ private fun FileJob.copyOrMove(
             null
         )
         return when (result.action) {
-            FileJobAction.POSITIVE -> {
+            FileJobErrorAction.POSITIVE -> {
                 if (result.isAll) {
                     actionAllInfo.skipCopyMoveOverItself = true
                 }
@@ -1212,19 +1250,19 @@ private fun FileJob.copyOrMove(
                 postCopyMoveNotification(transferInfo, source, type)
                 false
             }
-            FileJobAction.CANCELED -> {
+            FileJobErrorAction.CANCELED -> {
                 transferInfo.skipFile(source)
                 postCopyMoveNotification(transferInfo, source, type)
                 false
             }
-            FileJobAction.NEGATIVE -> throw InterruptedIOException()
+            FileJobErrorAction.NEGATIVE -> throw InterruptedIOException()
             else -> throw AssertionError(result.action)
         }
     }
     var target = target
     var replaceExisting = false
     var retry: Boolean
-    loop@ do {
+    do {
         retry = false
         val options = mutableListOf<CopyOption>().apply {
             this += LinkOption.NOFOLLOW_LINKS
@@ -1289,13 +1327,13 @@ private fun FileJob.copyOrMove(
                     } else {
                         replaceExisting = true
                         retry = true
-                        continue@loop
+                        continue
                     }
                 }
                 FileJobConflictAction.RENAME -> {
                     target = target.resolveSibling(result.name)
                     retry = true
-                    continue@loop
+                    continue
                 }
                 FileJobConflictAction.SKIP -> {
                     if (result.isAll) {
@@ -1332,7 +1370,14 @@ private fun FileJob.copyOrMove(
                 postCopyMoveNotification(transferInfo, source, type)
                 return false
             }
-            val result = showActionDialog(
+            if (e is UserActionRequiredException) {
+                val result = showUserAction(e)
+                if (result) {
+                    retry = true
+                    continue
+                }
+            }
+            val result = showErrorDialog(
                 getString(
                     type.getResourceId(
                         R.string.file_job_copy_error_title_format,
@@ -1354,11 +1399,11 @@ private fun FileJob.copyOrMove(
                 getString(android.R.string.cancel)
             )
             return when (result.action) {
-                FileJobAction.POSITIVE -> {
+                FileJobErrorAction.POSITIVE -> {
                     retry = true
-                    continue@loop
+                    continue
                 }
-                FileJobAction.NEGATIVE -> {
+                FileJobErrorAction.NEGATIVE -> {
                     if (result.isAll) {
                         actionAllInfo.skipCopyMoveError = true
                     }
@@ -1366,12 +1411,12 @@ private fun FileJob.copyOrMove(
                     postCopyMoveNotification(transferInfo, source, type)
                     false
                 }
-                FileJobAction.CANCELED -> {
+                FileJobErrorAction.CANCELED -> {
                     transferInfo.skipFile(source)
                     postCopyMoveNotification(transferInfo, source, type)
                     false
                 }
-                FileJobAction.NEUTRAL -> throw InterruptedIOException()
+                FileJobErrorAction.NEUTRAL -> throw InterruptedIOException()
             }
         }
     } while (retry)
@@ -1385,13 +1430,13 @@ private fun FileJob.postCopyMoveNotification(
 ) {
     postTransferSizeNotification(
         transferInfo, currentSource, type.getResourceId(
-            R.string.file_job_copy_notification_title_one,
-            R.string.file_job_extract_notification_title_one,
-            R.string.file_job_move_notification_title_one
+            R.string.file_job_copy_notification_title_one_format,
+            R.string.file_job_extract_notification_title_one_format,
+            R.string.file_job_move_notification_title_one_format
         ), type.getResourceId(
-            R.plurals.file_job_copy_notification_title_multiple,
-            R.plurals.file_job_extract_notification_title_multiple,
-            R.plurals.file_job_move_notification_title_multiple
+            R.plurals.file_job_copy_notification_title_multiple_format,
+            R.plurals.file_job_extract_notification_title_multiple_format,
+            R.plurals.file_job_move_notification_title_multiple_format
         )
     )
 }
@@ -1456,9 +1501,9 @@ private fun FileJob.open(
     val isExtract = file.isArchivePath
     val scanInfo = scan(
         file, if (isExtract) {
-            R.plurals.file_job_extract_scan_notification_title
+            R.plurals.file_job_extract_scan_notification_title_format
         } else {
-            R.plurals.file_job_copy_scan_notification_title
+            R.plurals.file_job_copy_scan_notification_title_format
         }
     )
     val cacheDirectory = Paths.get(cacheDirectory.path, "open_cache")
@@ -1467,7 +1512,10 @@ private fun FileJob.open(
     val targetFile = cacheDirectory.resolveForeign(targetFileName)
     val transferInfo = TransferInfo(scanInfo, cacheDirectory)
     val actionAllInfo = ActionAllInfo(replace = true)
-    copy(file, targetFile, isExtract, transferInfo, actionAllInfo)
+    val copied = copy(file, targetFile, isExtract, transferInfo, actionAllInfo)
+    if (!copied) {
+        return
+    }
     BackgroundActivityStarter.startActivity(
         intentCreator(targetFile), getString(notificationTitleFormatRes, targetFileName),
         getString(notificationTextRes), service
@@ -1485,7 +1533,7 @@ class RenameFileJob(private val path: Path, private val newName: String) : FileJ
 @Throws(IOException::class)
 private fun FileJob.rename(path: Path, newPath: Path) {
     var retry: Boolean
-    loop@ do {
+    do {
         retry = false
         try {
             moveAtomically(path, newPath)
@@ -1493,8 +1541,15 @@ private fun FileJob.rename(path: Path, newPath: Path) {
             throw e
         } catch (e: IOException) {
             e.printStackTrace()
-            val result = showActionDialog(
-                getString(R.string.file_job_rename_error_title, getFileName(path)),
+            if (e is UserActionRequiredException) {
+                val result = showUserAction(e)
+                if (result) {
+                    retry = true
+                    continue
+                }
+            }
+            val result = showErrorDialog(
+                getString(R.string.file_job_rename_error_title_format, getFileName(path)),
                 getString(
                     R.string.file_job_rename_error_message_format, getFileName(newPath),
                     e.toString()
@@ -1506,11 +1561,12 @@ private fun FileJob.rename(path: Path, newPath: Path) {
                 null
             )
             when (result.action) {
-                FileJobAction.POSITIVE -> {
+                FileJobErrorAction.POSITIVE -> {
                     retry = true
-                    continue@loop
+                    continue
                 }
-                FileJobAction.NEGATIVE, FileJobAction.CANCELED -> throw InterruptedIOException()
+                FileJobErrorAction.NEGATIVE, FileJobErrorAction.CANCELED ->
+                    throw InterruptedIOException()
                 else -> throw AssertionError(result.action)
             }
         }
@@ -1524,7 +1580,8 @@ class RestoreFileSeLinuxContextJob(
     @Throws(IOException::class)
     override fun run() {
         val scanInfo = scan(
-            path, recursive, R.plurals.file_job_restore_selinux_context_scan_notification_title
+            path, recursive,
+            R.plurals.file_job_restore_selinux_context_scan_notification_title_format
         )
         val transferInfo = TransferInfo(scanInfo, null)
         val actionAllInfo = ActionAllInfo()
@@ -1568,7 +1625,7 @@ private fun FileJob.restoreSeLinuxContext(
     actionAllInfo: ActionAllInfo
 ) {
     var retry: Boolean
-    loop@ do {
+    do {
         retry = false
         try {
             val options = if (followLinks) arrayOf() else arrayOf(LinkOption.NOFOLLOW_LINKS)
@@ -1584,7 +1641,14 @@ private fun FileJob.restoreSeLinuxContext(
                 postRestoreSeLinuxContextNotification(transferInfo, path)
                 return
             }
-            val result = showActionDialog(
+            if (e is UserActionRequiredException) {
+                val result = showUserAction(e)
+                if (result) {
+                    retry = true
+                    continue
+                }
+            }
+            val result = showErrorDialog(
                 getString(R.string.file_job_restore_selinux_context_error_title),
                 getString(
                     R.string.file_job_restore_selinux_context_error_message_format,
@@ -1597,11 +1661,11 @@ private fun FileJob.restoreSeLinuxContext(
                 getString(android.R.string.cancel)
             )
             when (result.action) {
-                FileJobAction.POSITIVE -> {
+                FileJobErrorAction.POSITIVE -> {
                     retry = true
-                    continue@loop
+                    continue
                 }
-                FileJobAction.NEGATIVE -> {
+                FileJobErrorAction.NEGATIVE -> {
                     if (result.isAll) {
                         actionAllInfo.skipRestoreSeLinuxContextError = true
                     }
@@ -1609,12 +1673,12 @@ private fun FileJob.restoreSeLinuxContext(
                     postRestoreSeLinuxContextNotification(transferInfo, path)
                     return
                 }
-                FileJobAction.CANCELED -> {
+                FileJobErrorAction.CANCELED -> {
                     transferInfo.skipFileIgnoringSize()
                     postRestoreSeLinuxContextNotification(transferInfo, path)
                     return
                 }
-                FileJobAction.NEUTRAL -> throw InterruptedIOException()
+                FileJobErrorAction.NEUTRAL -> throw InterruptedIOException()
                 else -> throw AssertionError(result.action)
             }
         }
@@ -1626,8 +1690,9 @@ private fun FileJob.postRestoreSeLinuxContextNotification(
     currentPath: Path
 ) {
     postTransferCountNotification(
-        transferInfo, currentPath, R.string.file_job_restore_selinux_context_notification_title_one,
-        R.plurals.file_job_restore_selinux_context_notification_title_multiple
+        transferInfo, currentPath,
+        R.string.file_job_restore_selinux_context_notification_title_one_format,
+        R.plurals.file_job_restore_selinux_context_notification_title_multiple_format
     )
 }
 
@@ -1638,7 +1703,9 @@ class SetFileGroupJob(
 ) : FileJob() {
     @Throws(IOException::class)
     override fun run() {
-        val scanInfo = scan(path, recursive, R.plurals.file_job_set_group_scan_notification_title)
+        val scanInfo = scan(
+            path, recursive, R.plurals.file_job_set_group_scan_notification_title_format
+        )
         val transferInfo = TransferInfo(scanInfo, null)
         val actionAllInfo = ActionAllInfo()
         walkFileTreeForSettingAttributes(path, recursive, object : SimpleFileVisitor<Path>() {
@@ -1682,7 +1749,7 @@ private fun FileJob.setGroup(
     actionAllInfo: ActionAllInfo
 ) {
     var retry: Boolean
-    loop@ do {
+    do {
         retry = false
         try {
             val options = if (followLinks) arrayOf() else arrayOf(LinkOption.NOFOLLOW_LINKS)
@@ -1698,7 +1765,14 @@ private fun FileJob.setGroup(
                 postSetGroupNotification(transferInfo, path)
                 return
             }
-            val result = showActionDialog(
+            if (e is UserActionRequiredException) {
+                val result = showUserAction(e)
+                if (result) {
+                    retry = true
+                    continue
+                }
+            }
+            val result = showErrorDialog(
                 getString(R.string.file_job_set_group_error_title_format, getFileName(path)),
                 getString(
                     R.string.file_job_set_group_error_message_format, getPrincipalName(group),
@@ -1711,11 +1785,11 @@ private fun FileJob.setGroup(
                 getString(android.R.string.cancel)
             )
             when (result.action) {
-                FileJobAction.POSITIVE -> {
+                FileJobErrorAction.POSITIVE -> {
                     retry = true
-                    continue@loop
+                    continue
                 }
-                FileJobAction.NEGATIVE -> {
+                FileJobErrorAction.NEGATIVE -> {
                     if (result.isAll) {
                         actionAllInfo.skipSetGroupError = true
                     }
@@ -1723,12 +1797,12 @@ private fun FileJob.setGroup(
                     postSetGroupNotification(transferInfo, path)
                     return
                 }
-                FileJobAction.CANCELED -> {
+                FileJobErrorAction.CANCELED -> {
                     transferInfo.skipFileIgnoringSize()
                     postSetGroupNotification(transferInfo, path)
                     return
                 }
-                FileJobAction.NEUTRAL -> throw InterruptedIOException()
+                FileJobErrorAction.NEUTRAL -> throw InterruptedIOException()
                 else -> throw AssertionError(result.action)
             }
         }
@@ -1737,8 +1811,8 @@ private fun FileJob.setGroup(
 
 private fun FileJob.postSetGroupNotification(transferInfo: TransferInfo, currentPath: Path) {
     postTransferCountNotification(
-        transferInfo, currentPath, R.string.file_job_set_group_notification_title_one,
-        R.plurals.file_job_set_group_notification_title_multiple
+        transferInfo, currentPath, R.string.file_job_set_group_notification_title_one_format,
+        R.plurals.file_job_set_group_notification_title_multiple_format
     )
 }
 
@@ -1750,7 +1824,9 @@ class SetFileModeJob(
 ) : FileJob() {
     @Throws(IOException::class)
     override fun run() {
-        val scanInfo = scan(path, recursive, R.plurals.file_job_set_mode_scan_notification_title)
+        val scanInfo = scan(
+            path, recursive, R.plurals.file_job_set_mode_scan_notification_title_format
+        )
         val transferInfo = TransferInfo(scanInfo, null)
         val actionAllInfo = ActionAllInfo()
         walkFileTreeForSettingAttributes(path, recursive, object : SimpleFileVisitor<Path>() {
@@ -1819,7 +1895,7 @@ private fun FileJob.setMode(
     actionAllInfo: ActionAllInfo
 ) {
     var retry: Boolean
-    loop@ do {
+    do {
         retry = false
         try {
             // This will always follow symbolic links.
@@ -1835,7 +1911,14 @@ private fun FileJob.setMode(
                 postSetModeNotification(transferInfo, path)
                 return
             }
-            val result = showActionDialog(
+            if (e is UserActionRequiredException) {
+                val result = showUserAction(e)
+                if (result) {
+                    retry = true
+                    continue
+                }
+            }
+            val result = showErrorDialog(
                 getString(R.string.file_job_set_mode_error_title_format, getFileName(path)),
                 getString(
                     R.string.file_job_set_mode_error_message_format, mode.toModeString(),
@@ -1848,11 +1931,11 @@ private fun FileJob.setMode(
                 getString(android.R.string.cancel)
             )
             when (result.action) {
-                FileJobAction.POSITIVE -> {
+                FileJobErrorAction.POSITIVE -> {
                     retry = true
-                    continue@loop
+                    continue
                 }
-                FileJobAction.NEGATIVE -> {
+                FileJobErrorAction.NEGATIVE -> {
                     if (result.isAll) {
                         actionAllInfo.skipSetModeError = true
                     }
@@ -1860,12 +1943,12 @@ private fun FileJob.setMode(
                     postSetModeNotification(transferInfo, path)
                     return
                 }
-                FileJobAction.CANCELED -> {
+                FileJobErrorAction.CANCELED -> {
                     transferInfo.skipFileIgnoringSize()
                     postSetModeNotification(transferInfo, path)
                     return
                 }
-                FileJobAction.NEUTRAL -> throw InterruptedIOException()
+                FileJobErrorAction.NEUTRAL -> throw InterruptedIOException()
                 else -> throw AssertionError(result.action)
             }
         }
@@ -1874,8 +1957,8 @@ private fun FileJob.setMode(
 
 private fun FileJob.postSetModeNotification(transferInfo: TransferInfo, currentPath: Path) {
     postTransferCountNotification(
-        transferInfo, currentPath, R.string.file_job_set_mode_notification_title_one,
-        R.plurals.file_job_set_mode_notification_title_multiple
+        transferInfo, currentPath, R.string.file_job_set_mode_notification_title_one_format,
+        R.plurals.file_job_set_mode_notification_title_multiple_format
     )
 }
 
@@ -1886,7 +1969,9 @@ class SetFileOwnerJob(
 ) : FileJob() {
     @Throws(IOException::class)
     override fun run() {
-        val scanInfo = scan(path, recursive, R.plurals.file_job_set_owner_scan_notification_title)
+        val scanInfo = scan(
+            path, recursive, R.plurals.file_job_set_owner_scan_notification_title_format
+        )
         val transferInfo = TransferInfo(scanInfo, null)
         val actionAllInfo = ActionAllInfo()
         walkFileTreeForSettingAttributes(path, recursive, object : SimpleFileVisitor<Path>() {
@@ -1930,7 +2015,7 @@ private fun FileJob.setOwner(
     actionAllInfo: ActionAllInfo
 ) {
     var retry: Boolean
-    loop@ do {
+    do {
         retry = false
         try {
             val options = if (followLinks) arrayOf() else arrayOf(LinkOption.NOFOLLOW_LINKS)
@@ -1946,7 +2031,14 @@ private fun FileJob.setOwner(
                 postSetOwnerNotification(transferInfo, path)
                 return
             }
-            val result = showActionDialog(
+            if (e is UserActionRequiredException) {
+                val result = showUserAction(e)
+                if (result) {
+                    retry = true
+                    continue
+                }
+            }
+            val result = showErrorDialog(
                 getString(R.string.file_job_set_owner_error_title_format, getFileName(path)),
                 getString(
                     R.string.file_job_set_owner_error_message_format, getPrincipalName(owner),
@@ -1959,11 +2051,11 @@ private fun FileJob.setOwner(
                 getString(android.R.string.cancel)
             )
             when (result.action) {
-                FileJobAction.POSITIVE -> {
+                FileJobErrorAction.POSITIVE -> {
                     retry = true
-                    continue@loop
+                    continue
                 }
-                FileJobAction.NEGATIVE -> {
+                FileJobErrorAction.NEGATIVE -> {
                     if (result.isAll) {
                         actionAllInfo.skipSetOwnerError = true
                     }
@@ -1971,12 +2063,12 @@ private fun FileJob.setOwner(
                     postSetOwnerNotification(transferInfo, path)
                     return
                 }
-                FileJobAction.CANCELED -> {
+                FileJobErrorAction.CANCELED -> {
                     transferInfo.skipFileIgnoringSize()
                     postSetOwnerNotification(transferInfo, path)
                     return
                 }
-                FileJobAction.NEUTRAL -> throw InterruptedIOException()
+                FileJobErrorAction.NEUTRAL -> throw InterruptedIOException()
                 else -> throw AssertionError(result.action)
             }
         }
@@ -1985,8 +2077,8 @@ private fun FileJob.setOwner(
 
 private fun FileJob.postSetOwnerNotification(transferInfo: TransferInfo, currentPath: Path) {
     postTransferCountNotification(
-        transferInfo, currentPath, R.string.file_job_set_owner_notification_title_one,
-        R.plurals.file_job_set_owner_notification_title_multiple
+        transferInfo, currentPath, R.string.file_job_set_owner_notification_title_one_format,
+        R.plurals.file_job_set_owner_notification_title_multiple_format
     )
 }
 
@@ -2001,7 +2093,7 @@ class SetFileSeLinuxContextJob(
     @Throws(IOException::class)
     override fun run() {
         val scanInfo = scan(
-            path, recursive, R.plurals.file_job_set_selinux_context_scan_notification_title
+            path, recursive, R.plurals.file_job_set_selinux_context_scan_notification_title_format
         )
         val transferInfo = TransferInfo(scanInfo, null)
         val actionAllInfo = ActionAllInfo()
@@ -2051,7 +2143,7 @@ private fun FileJob.setSeLinuxContext(
     actionAllInfo: ActionAllInfo
 ) {
     var retry: Boolean
-    loop@ do {
+    do {
         retry = false
         try {
             val options = if (followLinks) arrayOf() else arrayOf(LinkOption.NOFOLLOW_LINKS)
@@ -2067,7 +2159,14 @@ private fun FileJob.setSeLinuxContext(
                 postSetSeLinuxContextNotification(transferInfo, path)
                 return
             }
-            val result = showActionDialog(
+            if (e is UserActionRequiredException) {
+                val result = showUserAction(e)
+                if (result) {
+                    retry = true
+                    continue
+                }
+            }
+            val result = showErrorDialog(
                 getString(
                     R.string.file_job_set_selinux_context_error_title_format, getFileName(path)
                 ),
@@ -2082,11 +2181,11 @@ private fun FileJob.setSeLinuxContext(
                 getString(android.R.string.cancel)
             )
             when (result.action) {
-                FileJobAction.POSITIVE -> {
+                FileJobErrorAction.POSITIVE -> {
                     retry = true
-                    continue@loop
+                    continue
                 }
-                FileJobAction.NEGATIVE -> {
+                FileJobErrorAction.NEGATIVE -> {
                     if (result.isAll) {
                         actionAllInfo.skipSetSeLinuxContextError = true
                     }
@@ -2094,12 +2193,12 @@ private fun FileJob.setSeLinuxContext(
                     postSetSeLinuxContextNotification(transferInfo, path)
                     return
                 }
-                FileJobAction.CANCELED -> {
+                FileJobErrorAction.CANCELED -> {
                     transferInfo.skipFileIgnoringSize()
                     postSetSeLinuxContextNotification(transferInfo, path)
                     return
                 }
-                FileJobAction.NEUTRAL -> throw InterruptedIOException()
+                FileJobErrorAction.NEUTRAL -> throw InterruptedIOException()
                 else -> throw AssertionError(result.action)
             }
         }
@@ -2111,8 +2210,9 @@ private fun FileJob.postSetSeLinuxContextNotification(
     currentPath: Path
 ) {
     postTransferCountNotification(
-        transferInfo, currentPath, R.string.file_job_set_selinux_context_notification_title_one,
-        R.plurals.file_job_set_selinux_context_notification_title_multiple
+        transferInfo, currentPath,
+        R.string.file_job_set_selinux_context_notification_title_one_format,
+        R.plurals.file_job_set_selinux_context_notification_title_multiple_format
     )
 }
 
@@ -2123,8 +2223,8 @@ class WriteFileJob(
 ) : FileJob() {
     @Throws(IOException::class)
     override fun run() {
-        val success = write(file, content)
-        listener?.let { mainExecutor.execute { it(success) } }
+        val successful = write(file, content)
+        listener?.let { mainExecutor.execute { it(successful) } }
     }
 }
 
@@ -2135,7 +2235,7 @@ private fun FileJob.write(file: Path, content: ByteArray): Boolean {
         addToSize(content.size.toLong())
     }
     var retry: Boolean
-    loop@ do {
+    do {
         retry = false
         val transferInfo = TransferInfo(scanInfo, file)
         try {
@@ -2150,7 +2250,14 @@ private fun FileJob.write(file: Path, content: ByteArray): Boolean {
             throw e
         } catch (e: IOException) {
             e.printStackTrace()
-            val result = showActionDialog(
+            if (e is UserActionRequiredException) {
+                val result = showUserAction(e)
+                if (result) {
+                    retry = true
+                    continue
+                }
+            }
+            val result = showErrorDialog(
                 getString(R.string.file_job_write_error_title, getFileName(file)),
                 getString(
                     R.string.file_job_write_error_message_format, getFileName(file), e.toString()
@@ -2162,12 +2269,12 @@ private fun FileJob.write(file: Path, content: ByteArray): Boolean {
                 null
             )
             return when (result.action) {
-                FileJobAction.POSITIVE -> {
+                FileJobErrorAction.POSITIVE -> {
                     retry = true
-                    continue@loop
+                    continue
                 }
-                FileJobAction.NEGATIVE, FileJobAction.CANCELED -> false
-                FileJobAction.NEUTRAL -> throw InterruptedIOException()
+                FileJobErrorAction.NEGATIVE, FileJobErrorAction.CANCELED -> false
+                FileJobErrorAction.NEUTRAL -> throw InterruptedIOException()
             }
         }
     } while (retry)
@@ -2179,13 +2286,14 @@ private fun FileJob.postWriteNotification(transferInfo: TransferInfo) {
         return
     }
     val target = transferInfo.target!!
-    val title = getString(R.string.file_job_write_notification_title, getFileName(target))
+    val title = getString(R.string.file_job_write_notification_title_format, getFileName(target))
     val size = transferInfo.size
     val sizeString = size.asFileSize().formatHumanReadable(service)
     val transferredSize = transferInfo.transferredSize
     val transferredSizeString = transferredSize.asFileSize().formatHumanReadable(service)
     val text = getString(
-        R.string.file_job_transfer_size_notification_text_one, transferredSizeString, sizeString
+        R.string.file_job_transfer_size_notification_text_one_format, transferredSizeString,
+        sizeString
     )
     val max = size.toInt()
     val progress = transferredSize.toInt()

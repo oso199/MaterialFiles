@@ -5,49 +5,52 @@
 
 package me.zhanghai.android.files.provider.document.resolver
 
+import android.database.ContentObserver
 import android.database.Cursor
 import android.graphics.Bitmap
 import android.graphics.Point
 import android.net.Uri
 import android.os.Build
+import android.os.CancellationSignal
 import android.os.ParcelFileDescriptor
 import android.provider.DocumentsContract
 import androidx.annotation.RequiresApi
+import java8.nio.file.NoSuchFileException
+import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.suspendCancellableCoroutine
 import me.zhanghai.android.files.app.contentResolver
+import me.zhanghai.android.files.compat.DocumentsContractCompat
 import me.zhanghai.android.files.file.MimeType
 import me.zhanghai.android.files.provider.common.copyTo
-import me.zhanghai.android.files.provider.content.resolver.Resolver.openInputStream
-import me.zhanghai.android.files.provider.content.resolver.Resolver.openOutputStream
-import me.zhanghai.android.files.provider.content.resolver.Resolver.openParcelFileDescriptor
-import me.zhanghai.android.files.provider.content.resolver.Resolver.query
+import me.zhanghai.android.files.provider.content.resolver.Resolver
 import me.zhanghai.android.files.provider.content.resolver.ResolverException
 import me.zhanghai.android.files.provider.content.resolver.getLong
 import me.zhanghai.android.files.provider.content.resolver.getString
 import me.zhanghai.android.files.provider.content.resolver.moveToFirstOrThrow
 import me.zhanghai.android.files.provider.content.resolver.requireString
+import me.zhanghai.android.files.util.AbstractLocalCursor
 import java.io.FileNotFoundException
 import java.io.IOException
 import java.io.InputStream
 import java.io.OutputStream
 import java.util.Collections
 import java.util.WeakHashMap
+import kotlin.coroutines.resume
 
 object DocumentResolver {
     // @see com.android.shell.BugreportStorageProvider#AUTHORITY
     private const val BUGREPORT_STORAGE_PROVIDER_AUTHORITY = "com.android.shell.documents"
-    // @see com.android.externalstorage.ExternalStorageProvider#AUTHORITY
-    private const val EXTERNAL_STORAGE_PROVIDER_AUTHORITY = "com.android.externalstorage.documents"
     // @see com.android.mtp.MtpDocumentsProvider#AUTHORITY
     private const val MTP_DOCUMENTS_PROVIDER_AUTHORITY = "com.android.mtp.documents"
 
     private val LOCAL_AUTHORITIES = setOf(
         BUGREPORT_STORAGE_PROVIDER_AUTHORITY,
-        EXTERNAL_STORAGE_PROVIDER_AUTHORITY,
+        DocumentsContractCompat.EXTERNAL_STORAGE_PROVIDER_AUTHORITY,
         MTP_DOCUMENTS_PROVIDER_AUTHORITY
     )
     private val COPY_UNSUPPORTED_AUTHORITIES = setOf(
         BUGREPORT_STORAGE_PROVIDER_AUTHORITY,
-        EXTERNAL_STORAGE_PROVIDER_AUTHORITY,
+        DocumentsContractCompat.EXTERNAL_STORAGE_PROVIDER_AUTHORITY,
         MTP_DOCUMENTS_PROVIDER_AUTHORITY
     )
     private val MOVE_UNSUPPORTED_AUTHORITIES = setOf(
@@ -55,17 +58,19 @@ object DocumentResolver {
     )
     private val REMOVE_UNSUPPORTED_AUTHORITIES = setOf(
         BUGREPORT_STORAGE_PROVIDER_AUTHORITY,
-        EXTERNAL_STORAGE_PROVIDER_AUTHORITY,
+        DocumentsContractCompat.EXTERNAL_STORAGE_PROVIDER_AUTHORITY,
         MTP_DOCUMENTS_PROVIDER_AUTHORITY
     )
 
     private val pathDocumentIdCache = Collections.synchronizedMap(WeakHashMap<Path, String>())
 
+    private val directoryCursorCache = Collections.synchronizedMap(WeakHashMap<Path, Cursor>())
+
     @Throws(ResolverException::class)
     fun checkExistence(path: Path) {
         // Prevent cache from interfering with our check. Cache will be added again if
         // queryDocumentId() succeeds.
-        pathDocumentIdCache.remove(path)
+        pathDocumentIdCache -= path
         queryDocumentId(path)
     }
 
@@ -147,8 +152,8 @@ object DocumentResolver {
         }
         val targetUri = create(targetPath, mimeType)
         try {
-            openInputStream(sourceUri, "r").use { inputStream ->
-                openOutputStream(targetUri, "w").use { outputStream ->
+            Resolver.openInputStream(sourceUri, "r").use { inputStream ->
+                Resolver.openOutputStream(targetUri, "wt").use { outputStream ->
                     inputStream.copyTo(outputStream, intervalMillis, listener)
                 }
             }
@@ -188,7 +193,8 @@ object DocumentResolver {
         val uri = getDocumentUri(path)
         // Always remove the path from cache, in case a deletion actually succeeded despite
         // exception being thrown.
-        pathDocumentIdCache.remove(path)
+        pathDocumentIdCache -= path
+        directoryCursorCache -= path
         @Suppress("DEPRECATION")
         delete(uri)
     }
@@ -228,23 +234,25 @@ object DocumentResolver {
         }?.takeIf { it.isNotEmpty() && it != MimeType.GENERIC.value }
 
     @Throws(ResolverException::class)
-    fun getSize(path: Path): Long {
+    fun getSize(path: Path): Long? {
         val uri = getDocumentUri(path)
         return getSize(uri)
     }
 
     @Throws(ResolverException::class)
-    fun getSize(uri: Uri): Long =
+    fun getSize(uri: Uri): Long? =
         query(uri, arrayOf(DocumentsContract.Document.COLUMN_SIZE), null).use { cursor ->
             cursor.moveToFirstOrThrow()
             cursor.getLong(DocumentsContract.Document.COLUMN_SIZE)
         }
 
     @Throws(ResolverException::class)
-    fun getThumbnail(path: Path, width: Int, height: Int): Bitmap? {
+    fun getThumbnail(path: Path, width: Int, height: Int, signal: CancellationSignal): Bitmap? {
         val uri = getDocumentUri(path)
         return try {
-            DocumentsContract.getDocumentThumbnail(contentResolver, uri, Point(width, height), null)
+            DocumentsContract.getDocumentThumbnail(
+                contentResolver, uri, Point(width, height), signal
+            )
         } catch (e: Exception) {
             throw ResolverException(e)
         }
@@ -330,7 +338,7 @@ object DocumentResolver {
         } catch (e: ResolverException) {
             e.printStackTrace()
             return
-        }
+        } ?: return
         this(size)
     }
 
@@ -347,12 +355,15 @@ object DocumentResolver {
             val sourceParentUri = getDocumentUri(sourcePath.requireParent())
             remove(sourceUri, sourceParentUri)
         } catch (e: ResolverException) {
-            try {
-                val targetParentUri = getDocumentUri(targetPath.requireParent())
-                remove(targetUri, targetParentUri)
-            } catch (e2: ResolverException) {
-                e.addSuppressed(e2)
+            if (e.toFileSystemException(sourcePath.toString()) !is NoSuchFileException) {
+                try {
+                    val targetParentUri = getDocumentUri(targetPath.requireParent())
+                    remove(targetUri, targetParentUri)
+                } catch (e2: ResolverException) {
+                    e.addSuppressed(e2)
+                }
             }
+            throw e
         }
         return targetUri
     }
@@ -360,13 +371,13 @@ object DocumentResolver {
     @Throws(ResolverException::class)
     fun openInputStream(path: Path, mode: String): InputStream {
         val uri = getDocumentUri(path)
-        return openInputStream(uri, mode)
+        return Resolver.openInputStream(uri, mode)
     }
 
     @Throws(ResolverException::class)
     fun openOutputStream(path: Path, mode: String): OutputStream {
         val uri = getDocumentUri(path)
-        return openOutputStream(uri, mode)
+        return Resolver.openOutputStream(uri, mode)
     }
 
     @Throws(ResolverException::class)
@@ -375,7 +386,7 @@ object DocumentResolver {
         mode: String
     ): ParcelFileDescriptor {
         val uri = getDocumentUri(path)
-        return openParcelFileDescriptor(uri, mode)
+        return Resolver.openParcelFileDescriptor(uri, mode)
     }
 
     @Throws(ResolverException::class)
@@ -384,26 +395,40 @@ object DocumentResolver {
         val childrenUri = DocumentsContract.buildChildDocumentsUriUsingTree(
             parentPath.treeUri, parentDocumentId
         )
-        val childrenPaths = mutableListOf<Path>()
-        query(
-            childrenUri, arrayOf(
-                DocumentsContract.Document.COLUMN_DOCUMENT_ID,
-                DocumentsContract.Document.COLUMN_DISPLAY_NAME
-            ), null
-        ).use { cursor ->
-            while (cursor.moveToNext()) {
-                val childDocumentId = cursor.requireString(
-                    DocumentsContract.Document.COLUMN_DOCUMENT_ID
-                )
-                val childDisplayName = cursor.requireString(
-                    DocumentsContract.Document.COLUMN_DISPLAY_NAME
-                )
-                val childPath = parentPath.resolve(childDisplayName)
-                pathDocumentIdCache[childPath] = childDocumentId
-                childrenPaths += childPath
+        while (true) {
+            // A null projection means all supported columns should be included according to
+            // [DocumentsProvider.queryChildDocuments]. This is fine for functionality and
+            // performance as DocumentsProviderHelper in DocumentsUI is doing the same thing.
+            query(childrenUri, null, null).use { cursor ->
+                if (cursor.extras.getBoolean(DocumentsContract.EXTRA_LOADING)) {
+                    cursor.waitUntilChanged()
+                    return@use
+                }
+                val childrenPaths = mutableListOf<Path>()
+                while (cursor.moveToNext()) {
+                    val childDocumentId = cursor.requireString(
+                        DocumentsContract.Document.COLUMN_DOCUMENT_ID
+                    )
+                    val childDisplayName = cursor.requireString(
+                        DocumentsContract.Document.COLUMN_DISPLAY_NAME
+                    )
+                    val childPath = parentPath.resolve(childDisplayName)
+                    pathDocumentIdCache[childPath] = childDocumentId
+                    directoryCursorCache[childPath] = cursor.toRowCursor()
+                    childrenPaths += childPath
+                }
+                return childrenPaths
             }
         }
-        return childrenPaths
+    }
+
+    @Throws(ResolverException::class)
+    fun queryDocument(path: Path, uri: Uri): Cursor {
+        directoryCursorCache.remove(path)?.let { return it }
+        // A null projection means all supported columns should be included according to
+        // [DocumentsProvider.queryDocument]. This is fine for functionality and performance as
+        // DocumentsProviderHelper in DocumentsUI is doing the same thing.
+        return query(uri, null, null)
     }
 
     @Throws(ResolverException::class)
@@ -437,7 +462,8 @@ object DocumentResolver {
         val parentUri = getDocumentUri(path.requireParent())
         // Always remove the path from cache, in case a removal actually succeeded despite exception
         // being thrown.
-        pathDocumentIdCache.remove(path)
+        pathDocumentIdCache -= path
+        directoryCursorCache -= path
         removeApi24(uri, parentUri)
     }
 
@@ -464,7 +490,8 @@ object DocumentResolver {
         val uri = getDocumentUri(path)
         // Always remove the path from cache, in case a rename actually succeeded despite exception
         // being thrown.
-        pathDocumentIdCache.remove(path)
+        pathDocumentIdCache -= path
+        directoryCursorCache -= path
         return rename(uri, displayName)
     }
 
@@ -492,13 +519,10 @@ object DocumentResolver {
 
     @Throws(ResolverException::class)
     private fun queryDocumentId(path: Path): String {
-        var documentId = pathDocumentIdCache[path]
-        if (documentId != null) {
-            return documentId
-        }
+        pathDocumentIdCache[path]?.let { return it }
         val parentPath = path.parent
         val treeUri = path.treeUri
-        documentId = if (parentPath != null) {
+        val documentId = if (parentPath != null) {
             queryChildDocumentId(parentPath, path.displayName!!, treeUri)
         } else {
             // TODO: kotlinc: Type mismatch: inferred type is String? but String was expected
@@ -541,9 +565,12 @@ object DocumentResolver {
     }
 
     @Throws(ResolverException::class)
-    fun query(uri: Uri, projection: Array<out String?>?, sortOrder: String?): Cursor =
+    fun query(uri: Uri, projection: Array<out String?>?, sortOrder: String?): Cursor {
         // DocumentsProvider doesn't support selection and selectionArgs.
-        query(uri, projection, null, null, sortOrder)
+        var cursor = Resolver.query(uri, projection, null, null, sortOrder)
+        cursor = ExternalStorageProviderHacks.transformQueryResult(uri, cursor)
+        return cursor
+    }
 
     @Throws(ResolverException::class)
     private fun Path.requireParent(): Path =
@@ -554,5 +581,57 @@ object DocumentResolver {
         val displayName: String?
         val parent: Path?
         fun resolve(other: String): Path
+    }
+
+    @Throws(ResolverException::class)
+    private fun Cursor.waitUntilChanged() {
+        try {
+            runBlocking {
+                suspendCancellableCoroutine<Unit> { continuation ->
+                    val observer = object : ContentObserver(null) {
+                        override fun onChange(selfChange: Boolean) {
+                            unregisterContentObserver(this)
+                            continuation.resume(Unit)
+                        }
+                    }
+                    registerContentObserver(observer)
+                    continuation.invokeOnCancellation {
+                        try {
+                            unregisterContentObserver(observer)
+                        // This may be invoked when continuation is resumed but still cancelled
+                        // while waiting to be dispatched.
+                        } catch (ignored: IllegalStateException) {}
+                    }
+                }
+            }
+        } catch (e: InterruptedException) {
+            throw ResolverException(e)
+        }
+    }
+
+    private fun Cursor.toRowCursor(): Cursor {
+        val columnNames = columnNames
+        val rowValues = Array<Any?>(columnNames.size) {
+            when (val type = getType(it)) {
+                Cursor.FIELD_TYPE_NULL -> null
+                Cursor.FIELD_TYPE_INTEGER -> getLong(it)
+                Cursor.FIELD_TYPE_FLOAT -> getDouble(it)
+                Cursor.FIELD_TYPE_STRING -> getString(it)
+                Cursor.FIELD_TYPE_BLOB -> getBlob(it)
+                else -> throw ResolverException("Unknown cursor column type $type")
+            }
+        }
+        return RowCursor(columnNames, rowValues)
+    }
+
+    private class RowCursor(
+        private val columnNames: Array<String>,
+        private val rowValues: Array<Any?>
+    ) : AbstractLocalCursor() {
+        override fun getCount(): Int = 1
+
+        override fun getColumnNames(): Array<String> = columnNames
+
+        override fun getObject(columnIndex: Int): Any? = rowValues[columnIndex]
     }
 }

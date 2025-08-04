@@ -7,7 +7,6 @@ package me.zhanghai.android.files.provider.smb
 
 import android.os.Parcel
 import android.os.Parcelable
-import com.hierynomus.smbj.SMBClient
 import java8.nio.file.FileSystem
 import java8.nio.file.LinkOption
 import java8.nio.file.Path
@@ -16,9 +15,8 @@ import java8.nio.file.WatchEvent
 import java8.nio.file.WatchKey
 import java8.nio.file.WatchService
 import me.zhanghai.android.files.provider.common.ByteString
-import me.zhanghai.android.files.provider.common.ByteStringBuilder
 import me.zhanghai.android.files.provider.common.ByteStringListPath
-import me.zhanghai.android.files.provider.common.toByteString
+import me.zhanghai.android.files.provider.common.UriAuthority
 import me.zhanghai.android.files.provider.smb.client.Authority
 import me.zhanghai.android.files.provider.smb.client.Client
 import me.zhanghai.android.files.util.readParcelable
@@ -28,9 +26,10 @@ import java.io.IOException
 internal class SmbPath : ByteStringListPath<SmbPath>, Client.Path {
     private val fileSystem: SmbFileSystem
 
-    constructor(fileSystem: SmbFileSystem, path: ByteString) : super(
-        SmbFileSystem.SEPARATOR, path
-    ) {
+    constructor(
+        fileSystem: SmbFileSystem,
+        path: ByteString
+    ) : super(SmbFileSystem.SEPARATOR, path) {
         this.fileSystem = fileSystem
     }
 
@@ -50,13 +49,8 @@ internal class SmbPath : ByteStringListPath<SmbPath>, Client.Path {
     override fun createPath(absolute: Boolean, segments: List<ByteString>): SmbPath =
         SmbPath(fileSystem, absolute, segments)
 
-    override val uriSchemeSpecificPart: ByteString?
-        get() =
-            ByteStringBuilder(BYTE_STRING_TWO_SLASHES)
-                .append(fileSystem.authority.toString().toByteString())
-                .append(separator)
-                .append(super.uriSchemeSpecificPart!!)
-                .toByteString()
+    override val uriAuthority: UriAuthority
+        get() = fileSystem.authority.toUriAuthority()
 
     override val defaultDirectory: SmbPath
         get() = fileSystem.defaultDirectory
@@ -105,9 +99,9 @@ internal class SmbPath : ByteStringListPath<SmbPath>, Client.Path {
         if (isAbsolute) {
             // Port cannot be specified in a Windows UNC path for SMB, or otherwise it is resolved
             // as a WebDAV path.
-            check(authority.port == SMBClient.DEFAULT_PORT) {
+            check(authority.port == Authority.DEFAULT_PORT) {
                 "Path is absolute but uses port ${authority.port} instead of the default port ${
-                SMBClient.DEFAULT_PORT}"
+                Authority.DEFAULT_PORT}"
             }
             StringBuilder()
                 .append("\\\\")
@@ -137,8 +131,6 @@ internal class SmbPath : ByteStringListPath<SmbPath>, Client.Path {
     }
 
     companion object {
-        private val BYTE_STRING_TWO_SLASHES = "//".toByteString()
-
         @JvmField
         val CREATOR = object : Parcelable.Creator<SmbPath> {
             override fun createFromParcel(source: Parcel): SmbPath = SmbPath(source)

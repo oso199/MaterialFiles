@@ -9,9 +9,8 @@ import java8.nio.file.FileSystem
 import java8.nio.file.FileSystemAlreadyExistsException
 import java8.nio.file.FileSystemNotFoundException
 import java.lang.ref.WeakReference
-import java.util.HashMap
 
-class FileSystemCache<K, FS : FileSystem?> {
+class FileSystemCache<K : Any, FS : FileSystem?> {
     private val fileSystems: MutableMap<K, WeakReference<FS>> = HashMap()
 
     private val lock = Any()

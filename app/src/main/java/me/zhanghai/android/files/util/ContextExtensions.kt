@@ -13,6 +13,7 @@ import android.content.ContextWrapper
 import android.content.Intent
 import android.content.res.ColorStateList
 import android.content.res.Configuration
+import android.content.res.Resources
 import android.graphics.drawable.Drawable
 import android.os.Bundle
 import android.os.Looper
@@ -23,6 +24,7 @@ import android.view.animation.AnimationUtils
 import android.view.animation.Interpolator
 import android.widget.Toast
 import androidx.annotation.AnimRes
+import androidx.annotation.AnyRes
 import androidx.annotation.ArrayRes
 import androidx.annotation.AttrRes
 import androidx.annotation.BoolRes
@@ -34,7 +36,10 @@ import androidx.annotation.InterpolatorRes
 import androidx.annotation.PluralsRes
 import androidx.annotation.StyleRes
 import androidx.appcompat.view.ContextThemeWrapper
+import androidx.core.content.res.ResourcesCompat
+import androidx.core.util.TypedValueCompat
 import me.zhanghai.android.files.R
+import me.zhanghai.android.files.compat.complexUnitCompat
 import me.zhanghai.android.files.compat.getFloatCompat
 import me.zhanghai.android.files.compat.mainExecutorCompat
 import me.zhanghai.android.files.compat.obtainStyledAttributesCompat
@@ -54,17 +59,38 @@ val Context.activity: Activity?
 
 fun Context.getAnimation(@AnimRes id: Int): Animation = AnimationUtils.loadAnimation(this, id)
 
-fun Context.getBoolean(@BoolRes id: Int) = resources.getBoolean(id)
+fun Context.getBoolean(@BoolRes id: Int): Boolean = resources.getBoolean(id)
 
-fun Context.getDimension(@DimenRes id: Int) = resources.getDimension(id)
+@Dimension
+fun Context.getDimension(@DimenRes id: Int): Float = resources.getDimension(id)
 
-fun Context.getDimensionPixelOffset(@DimenRes id: Int) = resources.getDimensionPixelOffset(id)
+@Dimension(unit = Dimension.DP)
+fun Context.getDimensionDp(@DimenRes id: Int): Float {
+    TypedValue::class.useTemp { value ->
+        resources.getValue(id, value, true)
+        if (value.type != TypedValue.TYPE_DIMENSION) {
+            throw Resources.NotFoundException(
+                "Resource ID #0x${Integer.toHexString(id)} type #0x${
+                    Integer.toHexString(value.type)
+                } is not valid"
+            )
+        }
+        if (value.complexUnitCompat == TypedValue.COMPLEX_UNIT_DIP) {
+            return TypedValue.complexToFloat(value.data)
+        }
+        return dimensionToDp(TypedValue.complexToDimension(value.data, resources.displayMetrics))
+    }
+}
 
-fun Context.getDimensionPixelSize(@DimenRes id: Int) = resources.getDimensionPixelSize(id)
+@Dimension
+fun Context.getDimensionPixelOffset(@DimenRes id: Int): Int = resources.getDimensionPixelOffset(id)
 
-fun Context.getFloat(@DimenRes id: Int) = resources.getFloatCompat(id)
+@Dimension
+fun Context.getDimensionPixelSize(@DimenRes id: Int): Int = resources.getDimensionPixelSize(id)
 
-fun Context.getInteger(@IntegerRes id: Int) = resources.getInteger(id)
+fun Context.getFloat(@DimenRes id: Int): Float = resources.getFloatCompat(id)
+
+fun Context.getInteger(@IntegerRes id: Int): Int = resources.getInteger(id)
 
 fun Context.getInterpolator(@InterpolatorRes id: Int): Interpolator =
     AnimationUtils.loadInterpolator(this, id)
@@ -79,6 +105,8 @@ fun Context.getQuantityText(@PluralsRes id: Int, quantity: Int): CharSequence =
     resources.getQuantityText(id, quantity)
 
 fun Context.getStringArray(@ArrayRes id: Int): Array<String> = resources.getStringArray(id)
+
+fun Context.getTextArray(@ArrayRes id: Int): Array<CharSequence> = resources.getTextArray(id)
 
 @SuppressLint("RestrictedApi")
 fun Context.getBooleanByAttr(@AttrRes attr: Int): Boolean =
@@ -114,9 +142,18 @@ fun Context.getDrawableByAttr(@AttrRes attr: Int): Drawable =
 fun Context.getFloatByAttr(@AttrRes attr: Int): Float =
     obtainStyledAttributesCompat(attrs = intArrayOf(attr)).use { it.getFloat(0, 0f) }
 
+@AnyRes
 @SuppressLint("RestrictedApi")
 fun Context.getResourceIdByAttr(@AttrRes attr: Int): Int =
-    obtainStyledAttributesCompat(attrs = intArrayOf(attr)).use { it.getResourceId(0, 0) }
+    obtainStyledAttributesCompat(attrs = intArrayOf(attr)).use {
+        it.getResourceId(0, ResourcesCompat.ID_NULL)
+    }
+
+val Context.displayWidth: Int
+    get() = resources.displayMetrics.widthPixels
+
+val Context.displayHeight: Int
+    get() = resources.displayMetrics.heightPixels
 
 @Dimension
 fun Context.dpToDimension(@Dimension(unit = Dimension.DP) dp: Float): Float =
@@ -149,20 +186,12 @@ fun Context.dpToDimensionPixelSize(@Dimension(unit = Dimension.DP) dp: Float): I
 fun Context.dpToDimensionPixelSize(@Dimension(unit = Dimension.DP) dp: Int) =
     dpToDimensionPixelSize(dp.toFloat())
 
-val Context.shortAnimTime: Int
-    get() = getInteger(android.R.integer.config_shortAnimTime)
+@Dimension(unit = Dimension.DP)
+fun Context.dimensionToDp(@Dimension dimension: Float): Float =
+    TypedValueCompat.pxToDp(dimension, resources.displayMetrics)
 
-val Context.mediumAnimTime: Int
-    get() = getInteger(android.R.integer.config_mediumAnimTime)
-
-val Context.longAnimTime: Int
-    get() = getInteger(android.R.integer.config_longAnimTime)
-
-val Context.displayWidth: Int
-    get() = resources.displayMetrics.widthPixels
-
-val Context.displayHeight: Int
-    get() = resources.displayMetrics.heightPixels
+@Dimension(unit = Dimension.DP)
+fun Context.dimensionToDp(@Dimension dimension: Int): Float = dimensionToDp(dimension.toFloat())
 
 fun Context.hasSwDp(@Dimension(unit = Dimension.DP) dp: Int): Boolean =
     resources.configuration.smallestScreenWidthDp >= dp
@@ -179,17 +208,30 @@ val Context.hasW600Dp: Boolean
 val Context.hasW960Dp: Boolean
     get() = hasWDp(960)
 
+val Context.isLightTheme: Boolean
+    get() = getBooleanByAttr(androidx.appcompat.R.attr.isLightTheme)
+
+val Context.isMaterial3Theme: Boolean
+    @SuppressLint("PrivateResource")
+    get() = getBooleanByAttr(com.google.android.material.R.attr.isMaterial3Theme)
+
 val Context.isOrientationLandscape: Boolean
     get() = resources.configuration.orientation == Configuration.ORIENTATION_LANDSCAPE
 
 val Context.isOrientationPortrait: Boolean
     get() = resources.configuration.orientation == Configuration.ORIENTATION_PORTRAIT
 
-val Context.isLightTheme: Boolean
-    get() = getBooleanByAttr(R.attr.isLightTheme)
-
 val Context.layoutInflater: LayoutInflater
     get() = LayoutInflater.from(this)
+
+val Context.shortAnimTime: Int
+    get() = getInteger(android.R.integer.config_shortAnimTime)
+
+val Context.mediumAnimTime: Int
+    get() = getInteger(android.R.integer.config_mediumAnimTime)
+
+val Context.longAnimTime: Int
+    get() = getInteger(android.R.integer.config_longAnimTime)
 
 fun Context.showToast(textRes: Int, duration: Int = Toast.LENGTH_SHORT) {
     if (Looper.myLooper() != Looper.getMainLooper()) {

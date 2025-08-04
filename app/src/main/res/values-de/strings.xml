@@ -15,17 +15,19 @@
     <string name="default_">Standard</string>
     <string name="delete">Löschen</string>
     <string name="discard">Verwerfen</string>
+    <string name="edit">Bearbeiten</string>
     <string name="empty">Leer</string>
     <string name="empty_placeholder">(Leer)</string>
     <string name="error">Fehler</string>
+    <string name="hide">Ausblenden</string>
     <string name="install">Installieren</string>
     <string name="keep_editing">Weiter bearbeiten</string>
     <string name="loading">Laden…</string>
     <string name="maybe_later">Vielleicht später</string>
     <string name="merge">Zusammenführen</string>
     <string name="none">Nichts</string>
+    <string name="open_navigation_drawer">Navigationsmenü öffnen</string>
     <string name="paste">Einfügen</string>
-    <string name="pick">@string/select</string>
     <string name="refresh">Aktualisieren</string>
     <string name="reload">Neu laden</string>
     <string name="remove">Entfernen</string>
@@ -38,15 +40,15 @@
     <string name="select">Auswählen</string>
     <string name="select_all">Alles auswählen</string>
     <string name="share">Teilen</string>
+    <string name="show">Anzeigen</string>
     <string name="skip">Überspringen</string>
-    <string name="sort">Sortieren</string>
     <string name="stop">Stopp</string>
+    <string name="system_default">Systemvorgabe</string>
     <string name="unknown">Unbekannt</string>
     <string name="view">Anzeigen</string>
 
     <!-- android.R.string.app_not_found -->
     <string name="activity_not_found">Keine passende Anwendung gefunden</string>
-    <string name="copied_to_clipboard_format">@string/preference_copied</string>
     <string name="open_settings">Einstellungen öffnen</string>
     <string name="shortcut_created">Verknüpfung erstellt</string>
 
@@ -55,8 +57,13 @@
         <item quantity="other">%1$,d Bytes</item>
     </plurals>
 
-    <string name="storage_permission_request_message">App benötigt Berechtigungen für den Zugriff auf Dateien. Bitte klicken Sie im nächsten Dialog auf \"Erlauben\".</string>
+    <string name="all_files_access_rationale_message">App benötigt Berechtigungen für den Zugriff auf Dateien. Bitte den Zugriff in den Systemeinstellungen erlauben.</string>
+    <!-- The allow button before Android 10 was in all-caps. -->
+    <string name="storage_permission_rationale_message">App benötigt Berechtigungen für den Zugriff auf Dateien. Bitte klicken Sie im nächsten Dialog auf \"Erlauben\".</string>
     <string name="storage_permission_permanently_denied_message">App benötigt Berechtigungen für den Zugriff auf Dateien. Bitte erteilen Sie die \"Speicher\"-Berechtigung in den Systemeinstellungen.</string>
+    <!-- The allow button is in sentence case now. -->
+    <string name="notification_permission_rationale_message">Die App benötigt für Benachrichtigungen über Dateivorgänge die erforderlichen Berechtigungen. Bitte klicken Sie im kommenden Systemdialog auf „Zulassen“.</string>
+    <string name="notification_permission_permanently_denied_message">Die App benötigt für Benachrichtigungen über Dateivorgänge die erforderlichen Berechtigungen. Bitte erteilen Sie in den Systemeinstellungen die Berechtigung „Benachrichtigung“.</string>
 
     <string name="notification_channel_background_activity_start_name">Aktionen im Hintergrund</string>
     <string name="notification_channel_background_activity_start_description">Aktionen ausführen während die App im Hintergrund läuft</string>
@@ -65,100 +72,104 @@
     <string name="notification_channel_ftp_server_name">FTP-Server</string>
     <string name="notification_channel_ftp_server_description">Anzeigen und Steuern des FTP-Servers</string>
 
-    <plurals name="file_job_archive_scan_notification_title">
+    <string name="file_action_archive_password_title">Passwort erforderlich</string>
+    <string name="file_action_archive_password_message_format">“%1$s” ist passwortgeschützt.</string>
+    <string name="file_action_archive_password_error_empty">Passwort darf nicht leer sein</string>
+
+    <plurals name="file_job_archive_scan_notification_title_format">
         <item quantity="one">Bereite Komprimierung für %1$,d Datei vor (%2$s)</item>
         <item quantity="other">Bereite Komprimierung für %1$,d Dateien vor (%2$s)</item>
     </plurals>
-    <string name="file_job_archive_notification_title_one">Komprimiere \"%1$s\" nach \"%2$s\"</string>
-    <plurals name="file_job_archive_notification_title_multiple">
+    <string name="file_job_archive_notification_title_one_format">Komprimiere \"%1$s\" nach \"%2$s\"</string>
+    <plurals name="file_job_archive_notification_title_multiple_format">
         <item quantity="one">Komprimiere %1$,d Datei nach \"%2$s\"</item>
         <item quantity="other">Komprimiere %1$,d Dateien nach \"%2$s\"</item>
     </plurals>
-    <plurals name="file_job_copy_scan_notification_title">
+    <plurals name="file_job_copy_scan_notification_title_format">
         <item quantity="one">Bereite Kopieren von %1$,d Datei vor (%2$s)</item>
         <item quantity="other">Bereite Kopieren von %1$,d Dateien vor (%2$s)</item>
     </plurals>
-    <string name="file_job_copy_notification_title_one">Kopiere \"%1$s\" nach \"%2$s\"</string>
-    <plurals name="file_job_copy_notification_title_multiple">
+    <string name="file_job_copy_notification_title_one_format">Kopiere \"%1$s\" nach \"%2$s\"</string>
+    <plurals name="file_job_copy_notification_title_multiple_format">
         <item quantity="one">Kopiere %1$,d Datei nach \"%2$s\"</item>
         <item quantity="other">Kopiere %1$,d Dateien nach \"%2$s\"</item>
     </plurals>
-    <plurals name="file_job_extract_scan_notification_title">
+    <plurals name="file_job_extract_scan_notification_title_format">
         <item quantity="one">Bereite Extrahieren für %1$,d Datei vor (%2$s)</item>
         <item quantity="other">Bereite Extrahieren für %1$,d Dateien vor (%2$s)</item>
     </plurals>
-    <string name="file_job_extract_notification_title_one">Extrahiere \"%1$s\" nach \"%2$s\"</string>
-    <plurals name="file_job_extract_notification_title_multiple">
+    <string name="file_job_extract_notification_title_one_format">Extrahiere \"%1$s\" nach \"%2$s\"</string>
+    <plurals name="file_job_extract_notification_title_multiple_format">
         <item quantity="one">Extrahiere %1$,d Datei nach \"%2$s”</item>
         <item quantity="other">Extrahiere %1$,d Dateien nach \"%2$s”</item>
     </plurals>
-    <plurals name="file_job_move_scan_notification_title">
+    <plurals name="file_job_move_scan_notification_title_format">
         <item quantity="one">Bereite Verschieben von %1$,d Datei vor (%2$s)</item>
         <item quantity="other">Bereite Verschieben von %1$,d Dateien vor (%2$s)</item>
     </plurals>
-    <string name="file_job_move_notification_title_one">Verschiebe \"%1$s\" nach \"%2$s\"</string>
-    <plurals name="file_job_move_notification_title_multiple">
+    <string name="file_job_move_notification_title_one_format">Verschiebe \"%1$s\" nach \"%2$s\"</string>
+    <plurals name="file_job_move_notification_title_multiple_format">
         <item quantity="one">Verschiebe %1$,d Datei nach \"%2$s\"</item>
         <item quantity="other">Verschiebe %1$,d Dateien nach \"%2$s\"</item>
     </plurals>
-    <string name="file_job_transfer_size_notification_text_one">%1$s / %2$s</string>
-    <string name="file_job_transfer_size_notification_text_multiple">%1$,d / %2$,d</string>
-    <plurals name="file_job_delete_scan_notification_title">
+    <string name="file_job_transfer_size_notification_text_one_format">%1$s / %2$s</string>
+    <string name="file_job_transfer_size_notification_text_multiple_format">%1$,d / %2$,d</string>
+    <plurals name="file_job_delete_scan_notification_title_format">
         <item quantity="one">Bereite Löschen von %1$,d Datei vor</item>
         <item quantity="other">Bereite Löschen von %1$,d Dateien vor</item>
     </plurals>
-    <string name="file_job_delete_notification_title_one">Lösche \"%1$s\"</string>
-    <plurals name="file_job_delete_notification_title_multiple">
+    <string name="file_job_delete_notification_title_one_format">Lösche \"%1$s\"</string>
+    <plurals name="file_job_delete_notification_title_multiple_format">
         <item quantity="one">Lösche %1$,d Datei</item>
         <item quantity="other">Lösche %1$,d Dateien</item>
     </plurals>
-    <plurals name="file_job_set_owner_scan_notification_title">
+    <plurals name="file_job_set_owner_scan_notification_title_format">
         <item quantity="one">Bereite Änderung des Besitzers für %1$,d Datei vor</item>
         <item quantity="other">Bereite Änderung des Besitzers für %1$,d Dateien vor</item>
     </plurals>
-    <string name="file_job_set_owner_notification_title_one">Ändere Besitzer für \"%1$s\"</string>
-    <plurals name="file_job_set_owner_notification_title_multiple">
+    <string name="file_job_set_owner_notification_title_one_format">Ändere Besitzer für \"%1$s\"</string>
+    <plurals name="file_job_set_owner_notification_title_multiple_format">
         <item quantity="one">Ändere Besitzer für %1$,d Datei</item>
         <item quantity="other">Ändere Besitzer für %1$,d Dateien</item>
     </plurals>
-    <plurals name="file_job_set_group_scan_notification_title">
+    <plurals name="file_job_set_group_scan_notification_title_format">
         <item quantity="one">Bereite Änderung der Gruppe für %1$,d Datei vor</item>
         <item quantity="other">Bereite Änderung der Gruppe für %1$,d Dateien vor</item>
     </plurals>
-    <string name="file_job_set_group_notification_title_one">Ändere Gruppe für \"%1$s\"</string>
-    <plurals name="file_job_set_group_notification_title_multiple">
+    <string name="file_job_set_group_notification_title_one_format">Ändere Gruppe für \"%1$s\"</string>
+    <plurals name="file_job_set_group_notification_title_multiple_format">
         <item quantity="one">Ändere Gruppe für %1$,d Datei</item>
         <item quantity="other">Ändere Gruppe für %1$,d Dateien</item>
     </plurals>
-    <plurals name="file_job_set_mode_scan_notification_title">
+    <plurals name="file_job_set_mode_scan_notification_title_format">
         <item quantity="one">Bereite Änderung des Modus für %1$,d Datei vor</item>
         <item quantity="other">Bereite Änderung des Modus für %1$,d Dateien vor</item>
     </plurals>
-    <string name="file_job_set_mode_notification_title_one">Ändere Modus für \"%1$s\"</string>
-    <plurals name="file_job_set_mode_notification_title_multiple">
+    <string name="file_job_set_mode_notification_title_one_format">Ändere Modus für \"%1$s\"</string>
+    <plurals name="file_job_set_mode_notification_title_multiple_format">
         <item quantity="one">Ändere Modus für %1$,d Datei</item>
         <item quantity="other">Ändere Modus für %1$,d Dateien</item>
     </plurals>
-    <plurals name="file_job_set_selinux_context_scan_notification_title">
+    <plurals name="file_job_set_selinux_context_scan_notification_title_format">
         <item quantity="one">Bereite Änderung des SELinux Kontexts von %1$,d Datei vor</item>
         <item quantity="other">Bereite Änderung des SELinux Kontexts von %1$,d Dateien vor</item>
     </plurals>
-    <string name="file_job_set_selinux_context_notification_title_one">Ändere SELinux Kontext von \"%1$s\"</string>
-    <plurals name="file_job_set_selinux_context_notification_title_multiple">
+    <string name="file_job_set_selinux_context_notification_title_one_format">Ändere SELinux Kontext von \"%1$s\"</string>
+    <plurals name="file_job_set_selinux_context_notification_title_multiple_format">
         <item quantity="one">Ändere SELinux Kontext von %1$,d Datei</item>
         <item quantity="other">Ändere SELinux Kontext von %1$,d Dateien</item>
     </plurals>
-    <plurals name="file_job_restore_selinux_context_scan_notification_title">
+    <plurals name="file_job_restore_selinux_context_scan_notification_title_format">
         <item quantity="one">Bereite Wiederherstellung des SELinux Kontexts von %1$,d Datei vor</item>
         <item quantity="other">Bereite Wiederherstellung des SELinux Kontexts von %1$,d Dateien vor</item>
     </plurals>
-    <string name="file_job_restore_selinux_context_notification_title_one">Stelle SELinux Kontext von \"%1$s\" wieder her</string>
-    <plurals name="file_job_restore_selinux_context_notification_title_multiple">
+    <string name="file_job_restore_selinux_context_notification_title_one_format">Stelle SELinux Kontext von \"%1$s\" wieder her</string>
+    <plurals name="file_job_restore_selinux_context_notification_title_multiple_format">
         <item quantity="one">Stelle SELinux Kontext von %1$,d Datei wieder her</item>
         <item quantity="other">Stelle SELinux Kontext von %1$,d Dateien wieder her</item>
     </plurals>
-    <string name="file_job_transfer_count_notification_text_multiple">%1$,d / %2$,d</string>
-    <string name="file_job_write_notification_title">Schreibe \"%1$s\"</string>
+    <string name="file_job_transfer_count_notification_text_multiple_format">%1$,d / %2$,d</string>
+    <string name="file_job_write_notification_title_format">Schreibe \"%1$s\"</string>
     <string name="file_job_create_error_title">Fehler beim Erstellen</string>
     <string name="file_job_create_error_message_format">Es ist ein Fehler beim Erstellen der Datei \"%1$s\" aufgetreten.\n%2$s</string>
     <string name="file_job_cannot_copy_into_itself_title">Es ist nicht möglich, einen Ordner in sich selbst zu kopieren</string>
@@ -191,6 +202,8 @@
     <string name="file_job_move_error_message_format">Es ist ein Fehler beim Verschieben der Datei nach \"%1$s\" aufgetreten.\n%2$s</string>
     <string name="file_job_delete_error_title">Fehler beim Löschen</string>
     <string name="file_job_delete_error_message_format">Es ist ein Fehler beim Löschen von \"%1$s\" aufgetreten.\n%2$s</string>
+    <string name="file_job_rename_error_title_format">Fehler beim Umbenennen von \"%1$s\"</string>
+    <string name="file_job_rename_error_message_format">Es ist ein Fehler beim Umbenennen der Datei nach \"%1$s\" aufgetreten.\n%2$s</string>
     <string name="file_job_set_owner_error_title_format">Fehler beim Ändern des Besitzers von \"%1$s\"</string>
     <string name="file_job_set_owner_error_message_format">Es ist ein Fehler beim Ändern des Besitzers nach \"%1$s\" aufgetreten.\n%2$s</string>
     <string name="file_job_set_group_error_title_format">Fehler beim Ändern der Gruppe \"%1$s\"</string>
@@ -227,13 +240,23 @@
     <string name="file_name_error_already_exists">Eine Datei mit diesem Namen existiert bereits</string>
     <string name="file_delete_message_file_format">“%1$s” löschen?</string>
     <string name="file_delete_message_directory_format">Ordner “%1$s” und dessen Inhalt löschen?</string>
-    <string name="file_delete_message_multiple_files_format">%1$,d Dateien löschen?</string>
-    <string name="file_delete_message_multiple_directories_format">%1$,d Ordner und deren Inhalte löschen?</string>
-    <string name="file_delete_message_multiple_mixed_format">%1$,d Dateien löschen?</string>
+    <plurals name="file_delete_message_multiple_files_format">
+        <item quantity="one">%1$,d Datei löschen?</item>
+        <item quantity="other">%1$,d Dateien löschen?</item>
+    </plurals>
+    <plurals name="file_delete_message_multiple_directories_format">
+        <item quantity="one">%1$,d Ordner und dessen Inhalt löschen?</item>
+        <item quantity="other">%1$,d Ordner und deren Inhalte löschen?</item>
+    </plurals>
+    <plurals name="file_delete_message_multiple_mixed_format">
+        <item quantity="one">%1$,d Eintrag löschen?</item>
+        <item quantity="other">%1$,d Einträge löschen?</item>
+    </plurals>
     <string name="file_create_archive_title">Archiv erstellen</string>
     <string name="file_create_archive_type_zip">.zip</string>
     <string name="file_create_archive_type_tar_xz">.tar.xz</string>
     <string name="file_create_archive_type_7z">.7z</string>
+    <string name="file_create_archive_password">Passwort (optional)</string>
     <string name="file_add_bookmark_success">Lesezeichen hinzugefügt</string>
     <string name="file_create_file_title">Neue Datei</string>
     <string name="file_create_directory_title">Neuer Ordner</string>
@@ -256,25 +279,28 @@
         <item quantity="other">%1$,d Dateien</item>
     </plurals>
     <string name="file_list_subtitle_separator">,\u0020</string>
+    <string name="file_list_path_error_empty">Pfad darf nicht leer sein</string>
+    <string name="file_list_path_error_invalid">Ungültiger Pfad</string>
+    <string name="file_list_action_view_sort">Anzeigen und Sortieren</string>
+    <string name="file_list_action_view_list">Liste</string>
+    <string name="file_list_action_view_grid">Raster</string>
     <string name="file_list_action_sort_by_name">Name</string>
     <string name="file_list_action_sort_by_type">Typ</string>
     <string name="file_list_action_sort_by_size">Größe</string>
     <string name="file_list_action_sort_by_last_modified">Zuletzt geändert</string>
     <string name="file_list_action_sort_order_ascending">Aufsteigend</string>
     <string name="file_list_action_sort_directories_first">Ordner zuerst</string>
-    <string name="file_list_action_sort_path_specific">Nur für diesen Ordner</string>
+    <string name="file_list_action_view_sort_path_specific">Nur für diesen Ordner</string>
     <string name="file_list_action_new_task">Neues Fenster</string>
     <string name="file_list_action_navigate_up">Gehe hoch</string>
+    <string name="file_list_action_navigate_to">Gehe zu</string>
     <string name="file_list_action_show_hidden_files">Versteckte Dateien anzeigen</string>
     <string name="file_list_action_copy_path">Pfad kopieren</string>
     <string name="file_list_action_open_in_terminal">Im Terminal öffnen</string>
     <string name="file_list_action_add_bookmark">Lesezeichen hinzufügen</string>
     <string name="file_list_action_create_shortcut">Verknüpfung erstellen</string>
-    <string name="file_list_breadcrumb_action_copy_path">@string/file_list_action_copy_path</string>
     <string name="file_list_breadcrumb_action_open_in_new_task">In neuem Fenster öffnen</string>
-    <string name="file_list_select_title_format">%1$,d ausgewählt</string>
-    <string name="file_list_select_action_extract">@string/file_item_action_extract</string>
-    <string name="file_list_select_action_archive">@string/file_item_action_archive</string>
+    <string name="file_list_select_title_format">%1$,d</string>
     <string name="file_list_select_current_directory_format">“%1$s” auswählen</string>
     <string name="file_list_paste_move_title_format">Verschiebe %1$,d</string>
     <string name="file_list_paste_copy_title_format">Kopiere %1$,d</string>
@@ -288,9 +314,6 @@
     <string name="file_item_action_open_with">Öffnen mit</string>
     <string name="file_item_action_extract">Extrahieren</string>
     <string name="file_item_action_archive">Komprimieren </string>
-    <string name="file_item_action_copy_path">@string/file_list_action_copy_path</string>
-    <string name="file_item_action_add_bookmark">@string/file_list_action_add_bookmark</string>
-    <string name="file_item_action_create_shortcut">@string/file_list_action_create_shortcut</string>
     <string name="file_item_action_properties">Eigenschaften</string>
 
     <string name="file_properties_title_format">Eigenschaften von \"%1$s\"</string>
@@ -356,7 +379,7 @@
     <string name="file_properties_image_gps_altitude_format">%1$,.3f m</string>
     <string name="file_properties_image_equipment">Kamera</string>
     <string name="file_properties_image_equipment_format">%1$s %2$s</string>
-    <string name="file_properties_image_f_number">Apertur</string>
+    <string name="file_properties_image_f_number">Blende</string>
     <string name="file_properties_image_shutter_speed">Verschlusszeit</string>
     <string name="file_properties_image_focal_length">Brennweite</string>
     <string name="file_properties_image_focal_length_format">%1$.2f mm</string>
@@ -390,13 +413,146 @@
     <string name="file_properties_apk_min_sdk_version">Minimale Systemversion</string>
     <string name="file_properties_apk_target_sdk_version">Ziel-Systemversion</string>
     <string name="file_properites_apk_sdk_version_format">%1$s (%2$s, %3$d)</string>
+    <string name="file_properties_apk_requested_permissions">Berechtigungen</string>
+    <string name="file_properties_apk_requested_permissions_zero">Keine Berechtigungen angefordert</string>
+    <plurals name="file_properties_apk_requested_permissions_positive_format">
+        <item quantity="one">%1$,d Berechtigung angefordert</item>
+        <item quantity="other">%1$,d Berechtigungen angefordert</item>
+    </plurals>
     <string name="file_properties_apk_signature_digests">Signaturen</string>
+    <string name="file_properties_apk_signature_digests_empty">Keine gültigen Signaturen</string>
     <string name="file_properties_apk_past_signature_digests">Alte Signaturen</string>
 
-    <string name="navigation_root_directory">Wurzelverzeichnis</string>
-    <string name="navigation_root_subtitle_format">%1$s frei von %2$s</string>
-    <string name="navigation_add_document_tree">Externen Speicher hinzufügen…</string>
-    <string name="navigation_confirm_remove_document_tree_format">Externen Speicher \"%1$s\" entfernen?</string>
+    <string name="storage_file_system_root_title">Wurzel</string>
+    <string name="storage_list_title">Speicher</string>
+    <string name="storage_list_empty">Kein Speicher</string>
+    <string name="storage_add_storage_title">Speicher hinzufügen</string>
+    <string name="storage_add_storage_document_tree">Externer Speicher</string>
+    <string name="storage_add_storage_ftp_server">FTP-Server</string>
+    <string name="storage_add_storage_sftp_server">SFTP-Server</string>
+    <string name="storage_add_storage_smb_server">SMB-Server</string>
+    <string name="storage_add_storage_webdav_server">WebDAV-Server</string>
+    <string name="storage_edit_device_storage_title">Gerätespeicher bearbeiten</string>
+    <string name="storage_edit_device_storage_name">Name</string>
+    <string name="storage_edit_device_storage_path">Pfad</string>
+    <string name="storage_add_document_manager_shortcut_title">DocumentsUI Verknüpfung hinzufügen</string>
+    <string name="storage_edit_document_manager_shortcut_title">DocumentsUI Verknüpfung bearbeiten</string>
+    <string name="storage_edit_document_manager_shortcut_uri_error_empty">Gib eine URI ein</string>
+    <string name="storage_edit_document_manager_shortcut_uri_error_invalid">Ungültige URI</string>
+    <string name="storage_add_document_tree_title">Externen Speicher hinzufügen</string>
+    <string name="storage_edit_document_tree_title">Externen Speicher bearbeiten</string>
+    <string name="storage_edit_document_tree_name">Name</string>
+    <string name="storage_edit_document_tree_uri">URI</string>
+    <string name="storage_edit_document_tree_path">Pfad</string>
+    <string name="storage_edit_ftp_server_title_edit">FTP-Server bearbeiten</string>
+    <string name="storage_edit_ftp_server_title_add">FTP-Server hinzufügen</string>
+    <string name="storage_edit_ftp_server_host">Hostname</string>
+    <string name="storage_edit_ftp_server_host_error_empty">Hostname eingeben</string>
+    <string name="storage_edit_ftp_server_host_error_invalid">Ungültiger Hostname</string>
+    <string name="storage_edit_ftp_server_port">Port</string>
+    <string name="storage_edit_ftp_server_port_error_invalid">Ungültiger Port</string>
+    <string name="storage_edit_ftp_server_path">Pfad</string>
+    <string name="storage_edit_ftp_server_path_placeholder">Kann leer gelassen werden</string>
+    <string name="storage_edit_ftp_server_name">Name</string>
+    <string name="storage_edit_ftp_server_name_placeholder">Hostname verwenden</string>
+    <string name="storage_edit_ftp_server_protocol">Protokoll</string>
+    <string name="storage_edit_ftp_server_authentication_type">Authentifizierung</string>
+    <string-array name="storage_edit_ftp_server_authentication_type_entries">
+        <item>Passwort</item>
+        <item>Anonym</item>
+    </string-array>
+    <string name="storage_edit_ftp_server_username">Benutzername</string>
+    <string name="storage_edit_ftp_server_username_error_empty">Benutzername eingeben</string>
+    <string name="storage_edit_ftp_server_password">Passwort</string>
+    <string name="storage_edit_ftp_server_mode">Modus</string>
+    <string-array name="storage_edit_ftp_server_mode_entries">
+        <item>Aktiv</item>
+        <item>Passiv</item>
+    </string-array>
+    <string name="storage_edit_ftp_server_encoding">Kodierung</string>
+    <string name="storage_edit_ftp_server_connect_and_add">Verbinden und hinzufügen</string>
+    <string name="storage_edit_ftp_server_add">Hinzufügen</string>
+    <string name="storage_edit_sftp_server_title_edit">SFTP-Server bearbeiten</string>
+    <string name="storage_edit_sftp_server_title_add">SFTP-Server hinzufügen</string>
+    <string name="storage_edit_sftp_server_host">Hostname</string>
+    <string name="storage_edit_sftp_server_host_error_empty">Hostnamen eingeben</string>
+    <string name="storage_edit_sftp_server_host_error_invalid">Ungültiger Hostname</string>
+    <string name="storage_edit_sftp_server_port">Port</string>
+    <string name="storage_edit_sftp_server_port_error_invalid">Ungültiger Port</string>
+    <string name="storage_edit_sftp_server_path">Pfad</string>
+    <string name="storage_edit_sftp_server_path_placeholder">Kann leer gelassen werden</string>
+    <string name="storage_edit_sftp_server_name">Name</string>
+    <string name="storage_edit_sftp_server_name_placeholder">Hostname verwenden</string>
+    <string name="storage_edit_sftp_server_authentication_type">Authentifizierung</string>
+    <string-array name="storage_edit_sftp_server_authentication_type_entries">
+        <item>Passwort</item>
+        <item>Öffentlicher Schlüssel</item>
+    </string-array>
+    <string name="storage_edit_sftp_server_username">Benutzername</string>
+    <string name="storage_edit_sftp_server_username_error_empty">Benutzernamen eingeben</string>
+    <string name="storage_edit_sftp_server_password">Passwort</string>
+    <string name="storage_edit_sftp_server_private_key">Privater Schlüssel</string>
+    <string name="storage_edit_sftp_server_private_key_open_file">Datei öffnen</string>
+    <string name="storage_edit_sftp_server_private_key_error_empty">Privaten Schlüssel eingeben</string>
+    <string name="storage_edit_sftp_server_private_key_error_invalid">Ungültiger privater Schlüssel</string>
+    <string name="storage_edit_sftp_server_private_key_password">Passwort des privaten Schlüssels</string>
+    <string name="storage_edit_sftp_server_private_key_password_placeholder">Kann leer gelassen werden</string>
+    <string name="storage_edit_sftp_server_private_key_password_error_invalid">Passwort des privaten Schlüssels ungültig</string>
+    <string name="storage_edit_sftp_server_connect_and_add">Verbinden und hinzufügen</string>
+    <string name="storage_edit_sftp_server_add">Hinzufügen</string>
+    <string name="storage_add_lan_smb_server_loading">Suche nach SMB-Servern…</string>
+    <string name="storage_add_lan_smb_server_add">Manuell hinzufügen</string>
+    <string name="storage_edit_smb_server_title_edit">SMB-Server bearbeiten</string>
+    <string name="storage_edit_smb_server_title_add">SMB-Server hinzufügen</string>
+    <string name="storage_edit_smb_server_host">Hostname</string>
+    <string name="storage_edit_smb_server_host_error_empty">Benutzernamen eingeben</string>
+    <string name="storage_edit_smb_server_host_error_invalid">Ungültiger Hostname</string>
+    <string name="storage_edit_smb_server_port">Port</string>
+    <string name="storage_edit_smb_server_port_error_invalid">Ungültiger Port</string>
+    <string name="storage_edit_smb_server_path">Pfad</string>
+    <string name="storage_edit_smb_server_path_placeholder">Kann leer gelassen werden</string>
+    <string name="storage_edit_smb_server_name">Name</string>
+    <string name="storage_edit_smb_server_name_placeholder">Hostname verwenden</string>
+    <string name="storage_edit_smb_server_authentication_type">Authentifizierung</string>
+    <string-array name="storage_edit_smb_server_authentication_type_entries">
+        <item>Passwort</item>
+        <item>Gast</item>
+        <item>Anonym</item>
+    </string-array>
+    <string name="storage_edit_smb_server_username">Benutzername</string>
+    <string name="storage_edit_smb_server_username_error_empty">Benutzernamen eingeben</string>
+    <string name="storage_edit_smb_server_password">Passwort</string>
+    <string name="storage_edit_smb_server_domain">Domain</string>
+    <string name="storage_edit_smb_server_connect_and_add">Verbinden und hinzufügen</string>
+    <string name="storage_edit_smb_server_add">Hinzufügen</string>
+    <string name="storage_edit_webdav_server_title_edit">WebDAV-Server bearbeiten</string>
+    <string name="storage_edit_webdav_server_title_add">WebDAV-Server hinzufügen</string>
+    <string name="storage_edit_webdav_server_host">Hostname</string>
+    <string name="storage_edit_webdav_server_host_error_empty">Hostname eingeben</string>
+    <string name="storage_edit_webdav_server_host_error_invalid">Ungültiger Hostname</string>
+    <string name="storage_edit_webdav_server_port">Port</string>
+    <string name="storage_edit_webdav_server_port_error_invalid">Ungültiger Port</string>
+    <string name="storage_edit_webdav_server_path">Pfad</string>
+    <string name="storage_edit_webdav_server_path_placeholder">Kann leer gelassen werden</string>
+    <string name="storage_edit_webdav_server_name">Name</string>
+    <string name="storage_edit_webdav_server_name_placeholder">Hostname verwenden</string>
+    <string name="storage_edit_webdav_server_protocol">Protokoll</string>
+    <string name="storage_edit_webdav_server_authentication_type">Authentifizierung</string>
+    <string-array name="storage_edit_webdav_server_authentication_type_entries">
+        <item>Passwort</item>
+        <item>Zugangstoken</item>
+        <item>Nichts</item>
+    </string-array>
+    <string name="storage_edit_webdav_server_username">Benutzername</string>
+    <string name="storage_edit_webdav_server_username_error_empty">Benutzernamen eingeben</string>
+    <string name="storage_edit_webdav_server_password">Passwort</string>
+    <string name="storage_edit_webdav_server_access_token">Zugangstoken</string>
+    <string name="storage_edit_webdav_server_access_token_error_empty">Zugangstoken eingeben</string>
+    <string name="storage_edit_webdav_server_connect_and_add">Verbinden und hinzufügen</string>
+    <string name="storage_edit_webdav_server_add">Hinzufügen</string>
+
+    <string name="navigation_storage_subtitle_format">%1$s frei von %2$s</string>
+    <string name="navigation_add_storage">Speicher hinzufügen…</string>
     <string name="navigation_standard_directory_alarms">Alarme</string>
     <string name="navigation_standard_directory_dcim">DCIM</string>
     <string name="navigation_standard_directory_documents">Dokumente</string>
@@ -413,18 +569,15 @@
     <string name="navigation_edit_bookmark_directory_title">Lesezeichenordner</string>
     <string name="navigation_edit_bookmark_directory_name">Name</string>
     <string name="navigation_edit_bookmark_directory_path">Pfad</string>
-    <string name="navigation_ftp_server">@string/ftp_server_title</string>
-    <string name="navigation_settings">@string/settings_title</string>
-    <string name="navigation_about">@string/about_title</string>
-
+    <string name="archive_viewer_title">Archivbetrachter</string>
     <string name="image_viewer_title">Bildbetrachter</string>
     <string name="image_viewer_subtitle_format">%1$,d/%2$,d</string>
-    <string name="image_viewer_delete_message_format">@string/file_delete_message_file_format</string>
     <string name="text_editor_title">Textbearbeitung</string>
     <string name="text_editor_title_format">%1$s</string>
     <string name="text_editor_title_changed_format">*%1$s</string>
     <string name="text_editor_save_success">Gespeichert</string>
     <string name="text_editor_reload_message">Soll wirklich neu geladen werden? Alle nicht gespeicherten Änderungen gehen verloren.</string>
+    <string name="text_editor_encoding">Kodierung</string>
     <string name="text_editor_close_message">Sollen alle ungespeicherten Änderungen verworfen werden?</string>
 
     <string name="ftp_server_title">FTP-Server</string>
@@ -434,9 +587,13 @@
     <string name="ftp_server_state_summary_stopping">Beendet…</string>
     <string name="ftp_server_state_summary_stopped">Nicht gestartet</string>
     <string name="ftp_server_url_title">URL</string>
-    <string name="ftp_server_url_summary_no_local_inet_address">Lokale IP-Adresse konnte nicht abgerufen werden</string>
+    <string name="ftp_server_url_summary_no_local_inet_address">Die Lokale IP-Adresse ist unbekannt</string>
     <string name="ftp_server_url_menu_copy_url">Kopiere URL</string>
     <string name="ftp_server_url_menu_copy_password">Kopiere Passwort</string>
+    <string name="ftp_server_add_tile_title">Zu  den Schnell-Einstellungen hinzufügen</string>
+    <string name="ftp_server_add_tile_result_added">\"FTP-Server\" wurde zu den Schnelleinstellungen hinzugefügt</string>
+    <string name="ftp_server_add_tile_result_already_added">\"FTP-Server\" wurde bereits zu den Schnelleinstellungen hinzugefügt</string>
+    <string name="ftp_server_add_tile_result_error">Fehler beim Hinzufügen von \"FTP-Server\" zu den Schnelleinstellungen</string>
     <string name="ftp_server_configuration_title">Konfiguration</string>
     <string name="ftp_server_anonymous_login_title">Anonymer Login</string>
     <string name="ftp_server_username_title">Benutzername</string>
@@ -444,11 +601,12 @@
     <string name="ftp_server_port_title">Port</string>
     <string name="ftp_server_home_directory_title">Stammverzeichnis</string>
     <string name="ftp_server_writable_title">Erlaube Schreiben</string>
-    <string name="ftp_server_notification_title">@string/ftp_server_title</string>
-    <string name="ftp_server_notification_text">FTP-Server läuft</string>
-
     <string name="settings_title">Einstellungen</string>
     <string name="settings_interface_title">Benutzeroberfläche</string>
+    <string name="settings_locale_title">Sprache</string>
+    <string name="settings_theme_color_title">Themenfarbe</string>
+    <string name="settings_theme_color_summary">Die am häufigsten vorkommende Farbe in der App</string>
+    <string name="settings_material_design_3_title">Material Design 3</string>
     <string name="settings_night_mode_title">Nachtmodus</string>
     <string-array name="settings_night_mode_entries">
         <item>Nutze Systemeinstellung</item>
@@ -457,7 +615,15 @@
         <item>Zeitbasiert</item>
         <item>Basierend auf dem Batteriesparmodus</item>
     </string-array>
+    <string name="settings_black_night_mode">Schwarzer Nachtmodus</string>
     <string name="settings_file_list_animation_title">Dateiliste animieren</string>
+    <string name="settings_file_name_ellipsize_title">Langen Dateinamen anzeigen</string>
+    <string-array name="settings_file_name_ellipsize_entries">
+        <item>Den Anfang kürzen</item>
+        <item>Die Mitte kürzen</item>
+        <item>Das Ende kürzen</item>
+        <item>Laufschrift</item>
+    </string-array>
     <string name="settings_behavior_title">Verhalten</string>
     <string name="settings_default_directory_title">Startordner</string>
     <string name="settings_standard_directories_title">Standardordner</string>
@@ -465,7 +631,6 @@
     <string name="settings_bookmark_directory_screenshots">Screenshots</string>
     <string name="settings_bookmark_directories_title">Lesezeichenordner</string>
     <string name="settings_bookmark_directories_summary_empty">Keine Lesezeichenordner</string>
-    <string name="settings_bookmark_directories_empty">@string/settings_bookmark_directories_summary_empty</string>
     <string name="settings_root_strategy_title">Root Zugriffsmodus</string>
     <plurals name="settings_root_strategy_message_format">
         <item quantity="one">Es läuft gerade %1$,d Dateioperation. Ändern des Zugriffsmodus könnte unerwartete Fehler hervorrufen. Zugriffsmodus dennoch ändern?</item>
@@ -473,8 +638,7 @@
     </plurals>
     <string-array name="settings_root_strategy_entries">
         <item>Nur normaler Zugriff</item>
-        <item>Normalen Zugriff bevorzugen</item>
-        <item>Root-Zugriff bevorzugen</item>
+        <item>Automatisch</item>
         <item>Nur Root-Zugriff</item>
     </string-array>
     <string name="settings_archive_file_name_encoding_title">Zeichenkodierung des Dateinamens im Archiv</string>
@@ -484,6 +648,8 @@
         <item>Inhalt anzeigen</item>
         <item>Nachfragen</item>
     </string-array>
+    <string name="settings_show_pdf_thumbnail_pre_28_title">Miniaturansicht für PDF-Dateien anzeigen</string>
+    <string name="settings_show_pdf_thumbnail_pre_28_summary">Kann die App auf älteren Versionen von Android instabil machen</string>
     <string name="settings_read_remote_files_for_thumbnail_title">Remote-Dateien für Miniaturansichten lesen</string>
 
     <string name="about_title">Über</string>
@@ -494,9 +660,5 @@
     <string name="about_author_title">Autor</string>
     <string name="about_author_name_title">Hai Zhang</string>
     <string name="about_author_github_title">Auf GitHub folgen</string>
-    <string name="about_author_google_plus_title">Zu Google+ Kreisen hinzufügen</string>
     <string name="about_author_twitter_title">Auf Twitter folgen</string>
-
-    <string name="shortcut_downloads_title">@string/navigation_standard_directory_downloads</string>
-    <string name="shortcut_ftp_server_title">@string/ftp_server_title</string>
 </resources>

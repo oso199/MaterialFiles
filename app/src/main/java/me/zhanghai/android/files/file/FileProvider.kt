@@ -13,9 +13,13 @@ import android.content.pm.ProviderInfo
 import android.database.Cursor
 import android.database.MatrixCursor
 import android.net.Uri
+import android.os.Binder
+import android.os.Build
 import android.os.Handler
 import android.os.HandlerThread
 import android.os.ParcelFileDescriptor
+import android.os.Process
+import android.os.StrictMode
 import android.provider.DocumentsContract
 import android.provider.MediaStore
 import android.provider.OpenableColumns
@@ -46,6 +50,7 @@ import me.zhanghai.android.files.provider.document.isDocumentPath
 import me.zhanghai.android.files.provider.linux.isLinuxPath
 import me.zhanghai.android.files.provider.linux.syscall.SyscallException
 import me.zhanghai.android.files.util.hasBits
+import me.zhanghai.android.files.util.withoutPenaltyDeathOnNetwork
 import java.io.FileNotFoundException
 import java.io.IOException
 import java.io.InterruptedIOException
@@ -87,7 +92,7 @@ class FileProvider : ContentProvider() {
         sortOrder: String?
     ): Cursor? {
         // ContentProvider has already checked granted permissions
-        val projectionColumns = projection ?: COLUMNS
+        val projectionColumns = projection ?: getDefaultProjection()
         val path = uri.fileProviderPath
         val columns = mutableListOf<String>()
         val values = mutableListOf<Any?>()
@@ -140,6 +145,19 @@ class FileProvider : ContentProvider() {
         }
     }
 
+    private fun getDefaultProjection(): Array<String> =
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q
+            && Binder.getCallingUid() == Process.SYSTEM_UID) {
+            // com.android.internal.app.ChooserActivity.queryResolver() in Q queries with a null
+            // projection (meaning all columns) on main thread but only actually needs the display
+            // name (and document flags). However if we do return all the columns, we may perform
+            // network requests and crash it due to StrictMode. So just work around by only
+            // returning the display name in this case.
+            CHOOSER_ACTIVITY_DEFAULT_PROJECTION
+        } else {
+            DEFAULT_PROJECTION
+        }
+
     override fun getType(uri: Uri): String? {
         val path = uri.fileProviderPath
         return MimeType.guessFromPath(path.toString()).value
@@ -174,14 +192,13 @@ class FileProvider : ContentProvider() {
         if (path.canOpenDirectly(modeBits)) {
             return ParcelFileDescriptor.open(path.toFile(), modeBits)
         }
-        // Allowing other apps to write to files that require root access is dangerous.
-        // TODO: Relax this restriction for other cases?
-        if (modeBits != ParcelFileDescriptor.MODE_READ_ONLY) {
-            throw AccessDeniedException(mode).toFileNotFoundException()
-        }
         val options = modeBits.toOpenOptions()
         val channel = try {
-            path.newByteChannel(options)
+            // Strict mode thread policy is passed through binder, but some apps (notably music
+            // players) like to open file on their main thread.
+            StrictMode::class.withoutPenaltyDeathOnNetwork {
+                path.newByteChannel(options)
+            }
         } catch (e: IOException) {
             throw e.toFileNotFoundException()
         }
@@ -232,10 +249,10 @@ class FileProvider : ContentProvider() {
         if (this is FileNotFoundException) {
             this
         } else {
-            FileNotFoundException(message).apply { initCause(this) }
+            FileNotFoundException(message).apply { initCause(this@toFileNotFoundException) }
         }
 
-    private class ChannelCallback (
+    private class ChannelCallback(
         private val channel: SeekableByteChannel
     ) : ProxyFileDescriptorCallbackCompat() {
         private var offset = 0L
@@ -349,10 +366,16 @@ class FileProvider : ContentProvider() {
     }
 
     companion object {
-        private val COLUMNS = arrayOf(
+        private val DEFAULT_PROJECTION = arrayOf(
             OpenableColumns.DISPLAY_NAME,
             OpenableColumns.SIZE,
-            MediaStore.MediaColumns.DATA
+            MediaStore.MediaColumns.DATA,
+            DocumentsContract.Document.COLUMN_MIME_TYPE,
+            DocumentsContract.Document.COLUMN_LAST_MODIFIED
+        )
+
+        private val CHOOSER_ACTIVITY_DEFAULT_PROJECTION = arrayOf(
+            OpenableColumns.DISPLAY_NAME
         )
     }
 }
